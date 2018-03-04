@@ -1,9 +1,4 @@
-creepParts.set( 
-        MOVE, 50,
-        WORK, 100,
-        CARRY, 50,
-        ATTACK, 80,
-        RANGED_ATTACK, 150,
-        HEAL, 250,
-        CLAIM, 600,
-        TOUGH, 10);
+var targets = creep.room.find(FIND_STRUCTURES, {
+  filter: (structure) => {
+    return (dropOffPoints.includes(structure.structureType)) && structure.energy < structure.energyCapacity;}});
+    if(targets)
