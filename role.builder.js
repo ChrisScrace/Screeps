@@ -3,7 +3,7 @@ var roleBuilder = {
   run: function(creep) {
     if(creep.memory.building && creep.carry.energy == 0) {
         creep.memory.building = false;
-        creep.say('🔄 harvest');
+        creep.say('🚚 collecting');
     }
     else if(!creep.memory.building && creep.carry.energy == creep.carryCapacity) {
         creep.memory.building = true;
@@ -18,9 +18,16 @@ var roleBuilder = {
       }
     }
     else {
-      var sources = creep.room.find(FIND_SOURCES);
-      if(creep.harvest(sources[1]) == ERR_NOT_IN_RANGE) {
-        creep.moveTo(sources[1], {visualizePathStyle: {stroke: '#ffaa00'}});
+      var energyStorages = creep.room.find(FIND_STRUCTURES,{
+        filter: (structure) => {
+          return structure.structureType == STRUCTURE_CONTAINER && structure.store[RESOURCE_ENERGY] > 0;
+        }
+      });
+      if(energyStorages.length > 0){
+        energyStorages.sort(function(a, b)  {return b.store[RESOURCE_ENERGY] - a.store[RESOURCE_ENERGY]});
+        if(creep.withdraw(energyStorages[0], RESOURCE_ENERGY, creep.energyCapacity) == ERR_NOT_IN_RANGE) {
+          creep.moveTo(energyStorages[0], {visualizePathStyle: {stroke: '#ffaa00'}});
+        }
       }
     }
   }

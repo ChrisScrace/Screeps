@@ -13,8 +13,8 @@ var roleExtractor = {
     else{
       var sources = creep.room.find(FIND_SOURCES);
       var extractors = _.filter(Game.creeps, (otherCreep) => otherCreep.memory.model == creep.memory.model);
-      //creep.memory.target = sources[extractors.length % sources.length];
-      console.log('Target enegy source selected: ' + extractors.length % sources.length);
+      creep.memory.target = sources[extractors.length % sources.length];
+      creep.say('Moving to source: ' + extractors.length % sources.length);
     }
   }
 };

@@ -20,11 +20,11 @@ var creepCost = function (creepTags){
 }
 
 var creepDetails = {
-  'Extractor'         :   {'role' : 'extractor',  'cap' : 0 , 'build' : [WORK, WORK, MOVE]},
-  'Harvester'         :   {'role' : 'harvester',  'cap' : 2 , 'build' : [WORK, CARRY, MOVE, MOVE]},
-  'Builder'           :   {'role' : 'builder',    'cap' : 4 , 'build' : [WORK, WORK, CARRY, MOVE, MOVE]},
-  'Upgrader'          :   {'role' : 'upgrader',   'cap' : 0 , 'build' : [WORK, CARRY, MOVE]},
-  'UpgraderMkII'      :   {'role' : 'upgrader',   'cap' : 6 , 'build' : [WORK, WORK, CARRY, MOVE, MOVE]}};
+  'Extractor'   :   {'role' : 'extractor',    'cap' : 2 , 'build' : [WORK, WORK, MOVE]},
+  'Transporter' :   {'role' : 'transporter',  'cap' : 1 , 'build' : [WORK, CARRY, CARRY, MOVE, MOVE]},
+  'Cleaner'     :   {'role' : 'cleaner',      'cap' : 1 , 'build' : [WORK, CARRY, CARRY, MOVE, MOVE]},
+  'Builder'     :   {'role' : 'builder',      'cap' : 1 , 'build' : [WORK, WORK, CARRY, MOVE, MOVE]},
+  'Upgrader'    :   {'role' : 'upgrader',     'cap' : 1 , 'build' : [WORK, WORK, CARRY, MOVE, MOVE]}};
 
 var roleSpawn = {
   spawn:function(spawn){

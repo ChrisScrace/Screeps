@@ -1,11 +1,11 @@
 var dropOffPoints = [STRUCTURE_EXTENSION, STRUCTURE_TOWER, STRUCTURE_SPAWN];
 
-var roleHarvester = {
+var roleTransporter = {
   /** @param {Creep} creep **/
   run: function(creep) {
     if(creep.memory.delivering && creep.carry.energy <= 0) {
       creep.memory.delivering = false;
-      creep.say('🔄 harvest');
+      creep.say('🚚 collecting');
     }
     else if(!creep.memory.delivering && creep.carry.energy >= creep.carryCapacity) {
       creep.memory.delivering = true;
@@ -25,13 +25,20 @@ var roleHarvester = {
         }
     }
     else {
-      var sources = creep.room.find(FIND_SOURCES);
-      if(creep.harvest(sources[0]) == ERR_NOT_IN_RANGE) {
-        creep.moveTo(sources[0], {visualizePathStyle: {stroke: '#ffaa00'}});
+      var energyStorages = creep.room.find(FIND_STRUCTURES,{
+        filter: (structure) => {
+          return structure.structureType == STRUCTURE_CONTAINER && structure.store[RESOURCE_ENERGY] > 0;
+        }
+      });
+      if(energyStorages.length > 0){
+        energyStorages.sort(function(a, b)  {return b.store[RESOURCE_ENERGY] - a.store[RESOURCE_ENERGY]});
+        if(creep.withdraw(energyStorages[0], RESOURCE_ENERGY, creep.energyCapacity) == ERR_NOT_IN_RANGE) {
+          creep.moveTo(energyStorages[0], {visualizePathStyle: {stroke: '#ffaa00'}});
+        }
       }
     }
     creep.room.createConstructionSite(creep.pos, STRUCTURE_ROAD);
   }
 };
 
-module.exports = roleHarvester;
+module.exports = roleTransporter;
