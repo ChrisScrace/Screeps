@@ -2,27 +2,30 @@ const { assignSource } = require('sourceManager');
 
 module.exports = {
     run(creep) {
+        if (!creep.memory.sourceId) {
+            const sources = creep.room.find(FIND_SOURCES);
+            creep.memory.sourceId = creep.pos.findClosestByPath(sources).id;
+        }
+
+        const source = Game.getObjectById(creep.memory.sourceId);
+        if (!source) return;
+
+        // Find container near source
+        const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
+            filter: s => s.structureType === STRUCTURE_CONTAINER
+        })[0];
+
+        if (!container) return; // wait until container is built
+
         if (creep.store.getFreeCapacity() > 0) {
-            // Use shared module
-            const source = assignSource(creep);
-            if (source && creep.harvest(source) === ERR_NOT_IN_RANGE) {
+            if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
                 creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
             }
         } else {
-            // Delivery logic as before
-            const targets = creep.room.find(FIND_STRUCTURES, {
-                filter: structure => (
-                    (structure.structureType === STRUCTURE_EXTENSION ||
-                     structure.structureType === STRUCTURE_SPAWN ||
-                     structure.structureType === STRUCTURE_TOWER) &&
-                    structure.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-                )
-            });
-            if (targets.length > 0) {
-                if (creep.transfer(targets[0], RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(targets[0], { visualizePathStyle: { stroke: '#ffffff' } });
-                }
+            if (creep.transfer(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                creep.moveTo(container);
             }
         }
     }
 };
+

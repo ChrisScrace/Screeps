@@ -1,6 +1,9 @@
 module.exports = {
     run() {
-        const spawn = Game.spawns['Spawn1']; // rename if needed
+        const spawn = Game.spawns['Spawn1']; // adjust if multiple spawns
+        if (!spawn) return;
+
+        // === Show spawning status ===
         if (spawn.spawning) {
             const spawningCreep = Game.creeps[spawn.spawning.name];
             spawn.room.visual.text(
@@ -9,78 +12,83 @@ module.exports = {
                 spawn.pos.y,
                 { align: 'left', opacity: 0.8 }
             );
-            return; // Don’t spawn multiple at once
+            return; // only spawn one creep at a time
         }
 
         const room = spawn.room;
         const energyAvailable = room.energyAvailable;
-        const energyCapacity = room.energyCapacityAvailable;
 
-        // Count creeps by role
+        // === Count creeps by role ===
         const creepsByRole = _.groupBy(Game.creeps, c => c.memory.role);
         const numHarvesters = (creepsByRole['harvester'] || []).length;
+        const numHaulers = (creepsByRole['hauler'] || []).length;
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
         const numBuilders = (creepsByRole['builder'] || []).length;
 
-        // Get construction sites to decide if builders are needed
         const constructionSites = room.find(FIND_CONSTRUCTION_SITES).length;
 
-        // === Dynamic target counts ===
+        // === Target numbers (dynamic scaling) ===
         let targetHarvesters = 2;
+        let targetHaulers = 1;
         let targetUpgraders = 2;
         let targetBuilders = 1;
 
-        // More harvesters if low on energy
-        if (energyAvailable < 300) {
-            targetHarvesters = 3;
-        }
-
-        // More builders if there are many construction sites
-        if (constructionSites > 5) {
-            targetBuilders = 2;
-        }
-
-        // Scale up with room level
-        if (room.controller.level >= 3) {
+        if (energyAvailable < 300) targetHarvesters++;          // low energy → more harvesters
+        if (constructionSites > 5) targetBuilders++;           // more construction → more builders
+        if (room.controller.level >= 3) {                      // scale with RCL
             targetHarvesters++;
             targetUpgraders++;
             targetBuilders++;
+            targetHaulers++;                                    // more haulers for bigger rooms
         }
 
-        // === Decide which role to spawn ===
+        // === Determine role to spawn ===
         let roleToSpawn = null;
         if (numHarvesters < targetHarvesters) roleToSpawn = 'harvester';
+        else if (numHaulers < targetHaulers) roleToSpawn = 'hauler';
         else if (numUpgraders < targetUpgraders) roleToSpawn = 'upgrader';
         else if (numBuilders < targetBuilders) roleToSpawn = 'builder';
 
-        if (roleToSpawn) {
-            // === Dynamic body composition ===
-            const body = this.getDynamicBody(energyAvailable);
+        if (!roleToSpawn) return;
 
-            const newName = `${roleToSpawn}${Game.time}`;
-            const result = spawn.spawnCreep(body, newName, { memory: { role: roleToSpawn } });
+        // === Dynamic body based on role and energy ===
+        const body = this.getBodyForRole(roleToSpawn, energyAvailable);
 
-            if (result === OK) {
-                console.log(`Spawning new ${roleToSpawn}: ${newName} (${body.length} parts)`);
-            }
+        const newName = `${roleToSpawn}${Game.time}`;
+        const result = spawn.spawnCreep(body, newName, { memory: { role: roleToSpawn } });
+
+        if (result === OK) {
+            console.log(`Spawning new ${roleToSpawn}: ${newName} (${body.length} parts)`);
         }
     },
 
     /**
-     * Creates the best creep body we can afford given current energy
+     * Return dynamic body based on role and available energy
      */
-    getDynamicBody(energy) {
-        const basicPart = [WORK, CARRY, MOVE];
-        const body = [];
+    getBodyForRole(role, energy) {
+        switch (role) {
+            case 'harvester':
+                if (energy >= 550) return [WORK, WORK, CARRY, MOVE, MOVE];
+                if (energy >= 350) return [WORK, CARRY, MOVE, MOVE];
+                return [WORK, CARRY, MOVE];
 
-        // Repeat pattern until we run out of energy
-        let cost = 0;
-        while (cost + 200 <= energy && body.length < 15) { // cap to avoid huge creeps
-            body.push(WORK, CARRY, MOVE);
-            cost += 200;
+            case 'hauler':
+                if (energy >= 550) return [CARRY, CARRY, MOVE, MOVE, MOVE];
+                if (energy >= 350) return [CARRY, CARRY, MOVE, MOVE];
+                return [CARRY, MOVE, MOVE];
+
+            case 'upgrader':
+                if (energy >= 550) return [WORK, WORK, CARRY, MOVE, MOVE];
+                if (energy >= 350) return [WORK, CARRY, MOVE, MOVE];
+                return [WORK, CARRY, MOVE];
+
+            case 'builder':
+                if (energy >= 550) return [WORK, WORK, CARRY, MOVE, MOVE];
+                if (energy >= 350) return [WORK, CARRY, MOVE, MOVE];
+                return [WORK, CARRY, MOVE];
+
+            default:
+                return [WORK, CARRY, MOVE];
         }
-
-        // Always ensure at least a basic body
-        return body.length > 0 ? body : basicPart;
     }
 };

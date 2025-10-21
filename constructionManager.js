@@ -33,6 +33,7 @@ module.exports = {
         // === ROADS ===
         if (Game.time % 100 === 0) {
             planRoads(room);
+            this.buildSourceContainers(room);
         }
     },
 
@@ -103,5 +104,29 @@ module.exports = {
         const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
 
         return !hasStructure && !hasSite;
+    },
+
+    buildSourceContainers(room) {
+        const sources = room.find(FIND_SOURCES);
+        for (const source of sources) {
+            // Check if container already exists
+            const nearby = source.pos.findInRange(FIND_STRUCTURES, 1, {
+                filter: s => s.structureType === STRUCTURE_CONTAINER
+            });
+            if (nearby.length > 0) continue;
+
+            // Try to place container on a road-friendly tile
+            const offsets = [
+                { x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }
+            ];
+            for (const o of offsets) {
+                const x = source.pos.x + o.x;
+                const y = source.pos.y + o.y;
+                if (!this.isValidConstructionSite(x, y, room)) continue;
+                room.createConstructionSite(x, y, STRUCTURE_CONTAINER);
+                break;
+            }
+        }
     }
+
 };
