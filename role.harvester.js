@@ -1,5 +1,4 @@
-// role.harvester.js
-const { assignSource } = require('utils/sourceManager');
+const { assignSource } = require('sourceManager');
 
 module.exports = {
     run(creep) {
