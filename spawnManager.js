@@ -4,8 +4,7 @@ const roleBodies = {
     harvester: (energy) => {
         const body = [];
         let cost = 0;
-        // Early game: spawn small harvesters first if under full tiles
-        while (cost + 200 <= energy && body.length < 9) { // cap smaller for quick fill
+        while (cost + 200 <= energy && body.length < 9) {
             body.push(WORK, CARRY, MOVE);
             cost += 200;
         }
@@ -53,14 +52,15 @@ module.exports = {
         const creepsByRole = _.groupBy(Game.creeps, c => c.memory.role);
 
         // =====================
-        // HARVESTERS: Fill free tiles
+        // 1. HARVESTERS: fill all source tiles first
         // =====================
         const harvesters = creepsByRole['harvester'] || [];
         let sourceToSpawn = null;
         let maxFree = -1;
 
         for (const sId in sources) {
-            const freeTiles = sources[sId].tiles.length - harvesters.filter(h => h.memory.sourceId === sId).length;
+            const assigned = harvesters.filter(h => h.memory.sourceId === sId).length;
+            const freeTiles = sources[sId].tiles.length - assigned;
             if (freeTiles > maxFree) {
                 maxFree = freeTiles;
                 sourceToSpawn = sId;
@@ -72,7 +72,7 @@ module.exports = {
         }
 
         // =====================
-        // HAULERS: spawn if dropped energy exceeds haulers
+        // 2. HAULERS: spawn if dropped energy exceeds current haulers
         // =====================
         const haulers = creepsByRole['hauler'] || [];
         const freeEnergy = room.find(FIND_DROPPED_RESOURCES, { filter: r => r.resourceType === RESOURCE_ENERGY });
@@ -81,7 +81,7 @@ module.exports = {
         }
 
         // =====================
-        // UPGRADERS / BUILDERS
+        // 3. UPGRADERS / BUILDERS
         // =====================
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
         const numBuilders = (creepsByRole['builder'] || []).length;
