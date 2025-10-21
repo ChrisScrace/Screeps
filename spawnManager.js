@@ -1,68 +1,95 @@
 const sourceManager = require('sourceManager');
 
+const roleBodies = {
+    harvester: (energy) => {
+        const body = [];
+        let cost = 0;
+        while (cost + 200 <= energy && body.length < 15) { // cap
+            body.push(WORK, CARRY, MOVE);
+            cost += 200;
+        }
+        return body.length ? body : [WORK, CARRY, MOVE];
+    },
+    hauler: (energy) => {
+        const body = [];
+        let cost = 0;
+        while (cost + 150 <= energy && body.length < 15) {
+            body.push(CARRY, CARRY, MOVE);
+            cost += 150;
+        }
+        return body.length ? body : [CARRY, MOVE];
+    },
+    upgrader: (energy) => {
+        const body = [];
+        let cost = 0;
+        while (cost + 200 <= energy && body.length < 15) {
+            body.push(WORK, CARRY, MOVE);
+            cost += 200;
+        }
+        return body.length ? body : [WORK, CARRY, MOVE];
+    },
+    builder: (energy) => {
+        const body = [];
+        let cost = 0;
+        while (cost + 200 <= energy && body.length < 15) {
+            body.push(WORK, CARRY, MOVE);
+            cost += 200;
+        }
+        return body.length ? body : [WORK, CARRY, MOVE];
+    }
+};
+
 module.exports = {
     run() {
         const spawn = Game.spawns['Spawn1'];
-        if (!spawn) return;
+        if (!spawn || spawn.spawning) return;
+
         const room = spawn.room;
-
-        // Initialize source memory
-        sourceManager.initRoom(room);
-
-        if (spawn.spawning) {
-            const spawningCreep = Game.creeps[spawn.spawning.name];
-            spawn.room.visual.text(
-                '🛠️ ' + spawningCreep.memory.role,
-                spawn.pos.x + 1,
-                spawn.pos.y,
-                { align: 'left', opacity: 0.8 }
-            );
-            return;
-        }
-
         const energyAvailable = room.energyAvailable;
+        if (!Memory.rooms[room.name].sources) sourceManager.initRoom(room);
 
+        const sources = Memory.rooms[room.name].sources;
         const creepsByRole = _.groupBy(Game.creeps, c => c.memory.role);
-        const numHarvesters = (creepsByRole['harvester'] || []).length;
-        const numHaulers = (creepsByRole['hauler'] || []).length;
+
+        // === HARVESTERS: fill all free tiles ===
+        const harvesters = creepsByRole['harvester'] || [];
+        let harvestersPerSource = {};
+        for (const sId in sources) harvestersPerSource[sId] = 0;
+        for (const h of harvesters) {
+            if (h.memory.sourceId) harvestersPerSource[h.memory.sourceId]++;
+        }
+        let sourceToSpawn = null;
+        for (const sId in sources) {
+            if (sources[sId].tiles.length > harvestersPerSource[sId]) {
+                sourceToSpawn = sId;
+                break;
+            }
+        }
+        if (sourceToSpawn) return this.spawnCreep(spawn, 'harvester', sourceToSpawn, energyAvailable);
+
+        // === HAULERS: spawn if needed ===
+        const haulers = creepsByRole['hauler'] || [];
+        const freeEnergy = room.find(FIND_DROPPED_RESOURCES, {filter: r => r.resourceType === RESOURCE_ENERGY});
+        if (freeEnergy.length > haulers.length) return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
+
+        // === UPGRADERS / BUILDERS ===
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
         const numBuilders = (creepsByRole['builder'] || []).length;
+        const constructionSites = room.find(FIND_CONSTRUCTION_SITES).length;
+        const targetUpgraders = room.controller.level >= 3 ? 3 : 2;
+        const targetBuilders = constructionSites > 5 ? 2 : 1;
 
-        // Dynamic target numbers
-        const freeTileCount = Object.values(Memory.rooms[room.name].sources)
-                                   .reduce((sum, s) => sum + s.tiles.length, 0);
-
-        let targetHarvesters = freeTileCount;
-        let targetHaulers = freeTileCount; // 1 hauler per source tile
-        let targetUpgraders = 2;
-        let targetBuilders = room.find(FIND_CONSTRUCTION_SITES).length > 5 ? 2 : 1;
-
-        // Prioritize spawning
-        let roleToSpawn = null;
-        if (numHarvesters < targetHarvesters) roleToSpawn = 'harvester';
-        else if (numHaulers < targetHaulers) roleToSpawn = 'hauler';
-        else if (numUpgraders < targetUpgraders) roleToSpawn = 'upgrader';
-        else if (numBuilders < targetBuilders) roleToSpawn = 'builder';
-
-        if (!roleToSpawn) return;
-
-        const body = this.getBodyForRole(roleToSpawn, energyAvailable);
-        const newName = `${roleToSpawn}${Game.time}`;
-        const result = spawn.spawnCreep(body, newName, { memory: { role: roleToSpawn } });
-        if (result === OK) console.log(`Spawning new ${roleToSpawn}: ${newName} (${body.length} parts)`);
+        if (numUpgraders < targetUpgraders) return this.spawnCreep(spawn, 'upgrader', null, energyAvailable);
+        if (numBuilders < targetBuilders) return this.spawnCreep(spawn, 'builder', null, energyAvailable);
     },
 
-    getBodyForRole(role, energy) {
-        switch (role) {
-            case 'harvester': return energy >= 550 ? [WORK, WORK, CARRY, MOVE, MOVE] :
-                                         energy >= 350 ? [WORK, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
-            case 'hauler': return energy >= 550 ? [CARRY, CARRY, MOVE, MOVE, MOVE] :
-                                  energy >= 350 ? [CARRY, CARRY, MOVE, MOVE] : [CARRY, MOVE, MOVE];
-            case 'upgrader': return energy >= 550 ? [WORK, WORK, CARRY, MOVE, MOVE] :
-                                    energy >= 350 ? [WORK, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
-            case 'builder': return energy >= 550 ? [WORK, WORK, CARRY, MOVE, MOVE] :
-                                   energy >= 350 ? [WORK, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
-            default: return [WORK, CARRY, MOVE];
-        }
+    spawnCreep(spawn, role, sourceId = null, energy) {
+        const body = roleBodies[role](energy);
+        const name = `${role}${Game.time}`;
+        const memory = { role };
+        if (sourceId) memory.sourceId = sourceId;
+
+        const result = spawn.spawnCreep(body, name, { memory });
+        if (result === OK) console.log(`Spawning ${role} ${name} (${body.length} parts)`);
     }
 };
