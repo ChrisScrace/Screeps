@@ -1,56 +1,58 @@
 module.exports = {
     run(creep) {
+        // If empty, pick up energy
         if (creep.store.getFreeCapacity() > 0) {
-            // Pick nearest container with energy
-            const container = creep.pos.findClosestByPath(
-                creep.room.find(FIND_STRUCTURES, {
-                    filter: s => s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0
-                })
-            );
-            if (!container) return;
-
-            if (creep.pos.isNearTo(container)) {
-                creep.withdraw(container, RESOURCE_ENERGY);
-            } else {
-                creep.moveTo(container, { visualizePathStyle: { stroke: '#ffaa00' } });
+            // 1️⃣ Pick up dropped energy first
+            const dropped = creep.room.find(FIND_DROPPED_RESOURCES, {
+                filter: r => r.resourceType === RESOURCE_ENERGY
+            });
+            if (dropped.length > 0) {
+                const target = creep.pos.findClosestByPath(dropped);
+                if (target) {
+                    if (creep.pickup(target) === ERR_NOT_IN_RANGE) {
+                        creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' } });
+                    }
+                    return;
+                }
             }
-        } else {
-            // Deliver energy based on priority
-            const target = this.getEnergyTarget(creep);
-            if (!target) return;
 
-            if (creep.pos.isNearTo(target)) {
-                creep.transfer(target, RESOURCE_ENERGY);
-            } else {
-                creep.moveTo(target, { visualizePathStyle: { stroke: '#ffffff' } });
+            // 2️⃣ Withdraw from containers
+            const containers = creep.room.find(FIND_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0
+            });
+            if (containers.length > 0) {
+                const container = creep.pos.findClosestByPath(containers);
+                if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(container, { visualizePathStyle: { stroke: '#ffaa00' } });
+                }
+                return;
             }
         }
-    },
 
-    getEnergyTarget(creep) {
-        // Priority 1: Spawns and extensions
-        let targets = creep.room.find(FIND_STRUCTURES, {
-            filter: s =>
-                (s.structureType === STRUCTURE_SPAWN ||
-                 s.structureType === STRUCTURE_EXTENSION) &&
-                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        });
-        if (targets.length > 0) return creep.pos.findClosestByPath(targets);
+        // If full, deliver energy
+        if (creep.store[RESOURCE_ENERGY] > 0) {
+            // Priority: Spawn > Extensions > Towers > Storage
+            const targets = creep.room.find(FIND_MY_STRUCTURES, {
+                filter: s => 
+                    (s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION || s.structureType === STRUCTURE_TOWER)
+                    && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+            });
+            if (targets.length > 0) {
+                const target = creep.pos.findClosestByPath(targets);
+                if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(target, { visualizePathStyle: { stroke: '#ffffff' } });
+                }
+                return;
+            }
 
-        // Priority 2: Towers
-        targets = creep.room.find(FIND_STRUCTURES, {
-            filter: s =>
-                s.structureType === STRUCTURE_TOWER &&
-                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        });
-        if (targets.length > 0) return creep.pos.findClosestByPath(targets);
-
-        // Priority 3: Storage
-        targets = creep.room.find(FIND_STRUCTURES, {
-            filter: s =>
-                s.structureType === STRUCTURE_STORAGE &&
-                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        });
-        return targets.length > 0 ? creep.pos.findClosestByPath(targets) : null;
+            // Otherwise deposit in storage if available
+            const storage = creep.room.storage;
+            if (storage && storage.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
+                if (creep.transfer(storage, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(storage, { visualizePathStyle: { stroke: '#ffffff' } });
+                }
+                return;
+            }
+        }
     }
 };
