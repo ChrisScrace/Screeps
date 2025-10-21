@@ -1,58 +1,107 @@
-const { planRoads } = require('roadPlanner');
+const { planRoads } = require('utils/roadPlanner');
 
 module.exports = {
     run(room) {
         if (!room.controller || !room.controller.my) return;
 
-        // Limit total construction sites to avoid spam
+        // Limit construction sites to prevent spam
         if (room.find(FIND_CONSTRUCTION_SITES).length > 10) return;
 
-        // === AUTO-BUILD EXTENSIONS ===
-        const extensions = room.find(FIND_STRUCTURES, {
-            filter: s => s.structureType === STRUCTURE_EXTENSION
-        });
+        const spawns = room.find(FIND_MY_SPAWNS);
+        if (!spawns.length) return;
+        const spawn = spawns[0];
 
+        // === AUTO-BUILD EXTENSIONS ===
+        const extensions = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_EXTENSION });
         const extensionLimits = { 1: 0, 2: 5, 3: 10, 4: 20, 5: 30, 6: 40, 7: 50, 8: 60 };
         const maxExtensions = extensionLimits[room.controller.level] || 0;
 
         if (extensions.length < maxExtensions) {
-            const spawn = room.find(FIND_MY_SPAWNS)[0];
-            if (spawn) {
-                this.buildNear(spawn.pos, STRUCTURE_EXTENSION, room);
-            }
+            this.buildExtensionGrid(spawn.pos, room, maxExtensions - extensions.length);
         }
 
-        // === AUTO-BUILD TOWER AT RCL >= 3 ===
+        // === AUTO-BUILD TOWERS ===
         if (room.controller.level >= 3) {
             const towers = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_TOWER });
-            if (towers.length < 1) {
-                const spawn = room.find(FIND_MY_SPAWNS)[0];
-                if (spawn) {
-                    this.buildNear(spawn.pos, STRUCTURE_TOWER, room);
-                }
+            const maxTowers = room.controller.level >= 3 ? 1 : 0; // expand logic if you want more towers later
+
+            if (towers.length < maxTowers) {
+                this.buildTowerGrid(spawn.pos, room, maxTowers - towers.length);
             }
         }
 
-        // === ROADS handled by roadPlanner module ===
-        // Run adaptive road planning
-        if (Game.time % 100 === 0) { // throttle road planning to every 100 ticks
+        // === ROADS ===
+        if (Game.time % 100 === 0) {
             planRoads(room);
         }
     },
 
     /**
-     * Try placing a structure in a spiral pattern around a position
+     * Build extensions in a compact grid around a spawn
+     * @param {RoomPosition} center 
+     * @param {Room} room
+     * @param {number} count
      */
-    buildNear(pos, structureType, room) {
-        for (let dx = -3; dx <= 3; dx++) {
-            for (let dy = -3; dy <= 3; dy++) {
-                const x = pos.x + dx;
-                const y = pos.y + dy;
-                if (room.createConstructionSite(x, y, structureType) === OK) {
-                    console.log(`Placed ${structureType} at ${x},${y}`);
-                    return;
+    buildExtensionGrid(center, room, count) {
+        let placed = 0;
+
+        // Spiral pattern: first layer around spawn, then expand
+        for (let radius = 2; radius <= 5 && placed < count; radius++) {
+            for (let dx = -radius; dx <= radius && placed < count; dx++) {
+                for (let dy = -radius; dy <= radius && placed < count; dy++) {
+                    if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue; // only edges
+
+                    const x = center.x + dx;
+                    const y = center.y + dy;
+
+                    if (!this.isValidConstructionSite(x, y, room)) continue;
+
+                    if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
+                        placed++;
+                    }
                 }
             }
         }
+    },
+
+    /**
+     * Build towers in fixed pattern (corners around spawn)
+     */
+    buildTowerGrid(center, room, count) {
+        const offsets = [
+            { x: -2, y: -2 },
+            { x: 2, y: -2 },
+            { x: -2, y: 2 },
+            { x: 2, y: 2 }
+        ];
+
+        let placed = 0;
+        for (const offset of offsets) {
+            if (placed >= count) break;
+
+            const x = center.x + offset.x;
+            const y = center.y + offset.y;
+
+            if (!this.isValidConstructionSite(x, y, room)) continue;
+
+            if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) {
+                placed++;
+            }
+        }
+    },
+
+    /**
+     * Check if a position is valid for construction
+     */
+    isValidConstructionSite(x, y, room) {
+        if (x < 1 || x > 48 || y < 1 || y > 48) return false; // avoid walls
+
+        const terrain = room.getTerrain().get(x, y);
+        if (terrain === TERRAIN_MASK_WALL) return false;
+
+        const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
+        const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
+
+        return !hasStructure && !hasSite;
     }
 };
