@@ -1,15 +1,8 @@
 module.exports = {
     /**
-     * Initializes or refreshes the source data for a room.
-     * Safe to call every tick — it only rebuilds if needed.
+     * Initializes source data for a room
      */
     initRoom(room) {
-
-        if (Memory.rooms[room.name].sourceTiles) {
-            delete Memory.rooms[room.name].sourceTiles;
-        }
-
-
         if (!Memory.rooms) Memory.rooms = {};
         if (!Memory.rooms[room.name]) Memory.rooms[room.name] = {};
         if (!Memory.rooms[room.name].sources) Memory.rooms[room.name].sources = {};
@@ -29,13 +22,23 @@ module.exports = {
 
             const sourceData = Memory.rooms[room.name].sources[source.id];
 
-            // Recalculate tiles if missing or incomplete
+            // Recalculate tiles if missing
             if (!sourceData.tiles || sourceData.tiles.length === 0) {
-                sourceData.tiles = this._calculateTiles(room, source);
+                const tiles = [];
+                for (let dx = -1; dx <= 1; dx++) {
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const x = source.pos.x + dx;
+                        const y = source.pos.y + dy;
+                        if (room.lookForAt(LOOK_TERRAIN, x, y)[0] !== 'wall') {
+                            tiles.push({ x, y });
+                        }
+                    }
+                }
+                sourceData.tiles = tiles;
             }
         }
 
-        // Cleanup: remove old sources from memory
+        // Cleanup: remove sources that no longer exist
         for (const storedId in Memory.rooms[room.name].sources) {
             if (!sources.find(s => s.id === storedId)) {
                 delete Memory.rooms[room.name].sources[storedId];
@@ -44,7 +47,7 @@ module.exports = {
     },
 
     /**
-     * Assign a free tile near a source to a creep.
+     * Assigns a free tile near a source to a creep
      */
     assignTile(sourceId, creepName, roomName) {
         const roomData = Memory.rooms[roomName];
@@ -54,25 +57,25 @@ module.exports = {
 
         for (const tile of sourceData.tiles) {
             const key = `${tile.x},${tile.y}`;
-            const assignedTo = sourceData.assigned[key];
+            const assignedCreepName = sourceData.assigned[key];
+            const creep = Game.creeps[assignedCreepName];
 
-            // Reclaim tile if creep died
-            if (assignedTo && !Game.creeps[assignedTo]) {
+            // Reclaim if creep no longer exists
+            if (assignedCreepName && !creep) {
                 delete sourceData.assigned[key];
             }
 
-            if (!sourceData.assigned[key]) {
+            // Only assign if tile is free
+            const positionOccupied = creep && creep.pos.x === tile.x && creep.pos.y === tile.y;
+            if (!sourceData.assigned[key] && !positionOccupied) {
                 sourceData.assigned[key] = creepName;
                 return tile;
             }
         }
 
-        return null;
+        return null; // no free tile
     },
 
-    /**
-     * Release a tile when a creep dies.
-     */
     releaseTile(sourceId, creepName, roomName, tile) {
         const roomData = Memory.rooms[roomName];
         if (!roomData || !roomData.sources || !roomData.sources[sourceId]) return;
@@ -84,9 +87,6 @@ module.exports = {
         }
     },
 
-    /**
-     * Manual cleanup: remove dead creeps from assigned tiles.
-     */
     cleanupRoom(roomName) {
         const roomData = Memory.rooms[roomName];
         if (!roomData || !roomData.sources) return;
@@ -100,43 +100,6 @@ module.exports = {
                 }
             }
         }
-
-        console.log(`🧹 Cleaned invalid assignments in ${roomName}`);
-    },
-
-    /**
-     * ⚠️ Full reset: deletes all source data and rebuilds it fresh.
-     * Safe to call from the console: sourceManager.resetRoom('W1N1')
-     */
-    resetRoom(roomName) {
-        const room = Game.rooms[roomName];
-        if (!room) {
-            console.log(`❌ Room ${roomName} not visible or invalid.`);
-            return;
-        }
-
-        if (Memory.rooms && Memory.rooms[roomName]) {
-            delete Memory.rooms[roomName].sources;
-        }
-
-        this.initRoom(room);
-        console.log(`🔄 Source data reset for room ${roomName}`);
-    },
-
-    /**
-     * Internal helper: calculate walkable tiles around a source.
-     */
-    _calculateTiles(room, source) {
-        const tiles = [];
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                const x = source.pos.x + dx;
-                const y = source.pos.y + dy;
-                if (room.lookForAt(LOOK_TERRAIN, x, y)[0] !== 'wall') {
-                    tiles.push({ x, y });
-                }
-            }
-        }
-        return tiles;
+        console.log(`🧹 Cleaned source assignments in ${roomName}`);
     }
 };
