@@ -1,5 +1,6 @@
 const roleHarvester = require('role.harvester');
 const roleUpgrader = require('role.upgrader');
+const roleHauler = require('role.hauler');
 const roleBuilder = require('role.builder');
 const spawnManager = require('spawnManager');
 const constructionManager = require('constructionManager');
