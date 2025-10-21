@@ -4,6 +4,7 @@ module.exports = {
     run(creep) {
         if (!creep.memory.sourceId) {
             const source = creep.pos.findClosestByPath(FIND_SOURCES);
+            if (!source) return;
             creep.memory.sourceId = source.id;
         }
 
@@ -17,22 +18,32 @@ module.exports = {
             creep.memory.tile = tile;
         }
 
-        const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
-            filter: s => s.structureType === STRUCTURE_CONTAINER
-        })[0];
-        if (!container) return;
-
         // Move to reserved tile
         if (creep.pos.x !== creep.memory.tile.x || creep.pos.y !== creep.memory.tile.y) {
             creep.moveTo(creep.memory.tile.x, creep.memory.tile.y, { visualizePathStyle: { stroke: '#ffaa00' } });
             return;
         }
 
-        // Harvest
+        // Find nearby container
+        const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
+            filter: s => s.structureType === STRUCTURE_CONTAINER
+        })[0];
+
+        // Harvest energy
         if (creep.store.getFreeCapacity() > 0) {
             creep.harvest(source);
+        }
+
+        // Deposit energy
+        if (container) {
+            if (creep.store[RESOURCE_ENERGY] > 0) {
+                creep.transfer(container, RESOURCE_ENERGY);
+            }
         } else {
-            creep.transfer(container, RESOURCE_ENERGY);
+            // Drop energy on the ground if no container exists
+            if (creep.store[RESOURCE_ENERGY] > 0) {
+                creep.drop(RESOURCE_ENERGY);
+            }
         }
     },
 
