@@ -5,7 +5,9 @@ module.exports = {
         if (!room.controller || !room.controller.my) return;
 
         // Limit construction sites to prevent spam
-        if (room.find(FIND_CONSTRUCTION_SITES).length > 10) return;
+        const maxSites = room.controller.level <= 2 ? 10 :
+                 room.controller.level <= 5 ? 25 : 50;
+        if (room.find(FIND_CONSTRUCTION_SITES).length > maxSites) return;
 
         const spawns = room.find(FIND_MY_SPAWNS);
         if (!spawns.length) return;

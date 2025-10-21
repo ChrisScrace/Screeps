@@ -1,9 +1,8 @@
 module.exports = {
     run() {
-        const spawn = Game.spawns['Spawn1']; // adjust if multiple spawns
+        const spawn = Game.spawns['Spawn1'];
         if (!spawn) return;
 
-        // === Show spawning status ===
         if (spawn.spawning) {
             const spawningCreep = Game.creeps[spawn.spawning.name];
             spawn.room.visual.text(
@@ -12,13 +11,12 @@ module.exports = {
                 spawn.pos.y,
                 { align: 'left', opacity: 0.8 }
             );
-            return; // only spawn one creep at a time
+            return;
         }
 
         const room = spawn.room;
         const energyAvailable = room.energyAvailable;
 
-        // === Count creeps by role ===
         const creepsByRole = _.groupBy(Game.creeps, c => c.memory.role);
         const numHarvesters = (creepsByRole['harvester'] || []).length;
         const numHaulers = (creepsByRole['hauler'] || []).length;
@@ -26,23 +24,23 @@ module.exports = {
         const numBuilders = (creepsByRole['builder'] || []).length;
 
         const constructionSites = room.find(FIND_CONSTRUCTION_SITES).length;
+        const sources = room.find(FIND_SOURCES);
 
-        // === Target numbers (dynamic scaling) ===
-        let targetHarvesters = 2;
-        let targetHaulers = 1;
+        // === Target numbers ===
+        let targetHarvesters = sources.length * 2;
+        let targetHaulers = sources.length;
         let targetUpgraders = 2;
-        let targetBuilders = 1;
+        let targetBuilders = constructionSites > 5 ? 2 : 1;
 
-        if (energyAvailable < 300) targetHarvesters++;          // low energy → more harvesters
-        if (constructionSites > 5) targetBuilders++;           // more construction → more builders
-        if (room.controller.level >= 3) {                      // scale with RCL
+        if (energyAvailable < 300) targetHarvesters++;
+        if (room.controller.level >= 3) {
             targetHarvesters++;
+            targetHaulers++;
             targetUpgraders++;
             targetBuilders++;
-            targetHaulers++;                                    // more haulers for bigger rooms
         }
 
-        // === Determine role to spawn ===
+        // === Decide which role to spawn ===
         let roleToSpawn = null;
         if (numHarvesters < targetHarvesters) roleToSpawn = 'harvester';
         else if (numHaulers < targetHaulers) roleToSpawn = 'hauler';
@@ -51,9 +49,7 @@ module.exports = {
 
         if (!roleToSpawn) return;
 
-        // === Dynamic body based on role and energy ===
         const body = this.getBodyForRole(roleToSpawn, energyAvailable);
-
         const newName = `${roleToSpawn}${Game.time}`;
         const result = spawn.spawnCreep(body, newName, { memory: { role: roleToSpawn } });
 
@@ -62,9 +58,6 @@ module.exports = {
         }
     },
 
-    /**
-     * Return dynamic body based on role and available energy
-     */
     getBodyForRole(role, energy) {
         switch (role) {
             case 'harvester':
