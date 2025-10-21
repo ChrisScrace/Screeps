@@ -1,4 +1,4 @@
-const { planRoads } = require('utils/roadPlanner');
+const { planRoads } = require('roadPlanner');
 
 module.exports = {
     run(room) {
