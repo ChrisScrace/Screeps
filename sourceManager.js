@@ -58,7 +58,9 @@ module.exports = {
         if (!mem[roomName][sourceId]) mem[roomName][sourceId] = {};
 
         const assignedTiles = mem[roomName][sourceId];
-        const sourceData = Memory.rooms[roomName]?.sources[sourceId];
+        const roomMem = Memory.rooms && Memory.rooms[roomName];
+        const sourceData = roomMem && roomMem.sources && roomMem.sources[sourceId];
+
         if (!sourceData) return null;
 
         // Loop through all possible tiles
