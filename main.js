@@ -3,7 +3,7 @@ const roleUpgrader = require('role.upgrader');
 const roleBuilder = require('role.builder');
 const spawnManager = require('spawnManager');
 const constructionManager = require('constructionManager');
-const towerManager = require('towerManager'); // 👈 add this
+const towerManager = require('towerManager');
 
 module.exports.loop = function () {
     // Clean up memory
@@ -19,7 +19,7 @@ module.exports.loop = function () {
         if (!room.controller || !room.controller.my) continue;
 
         constructionManager.run(room);
-        towerManager.run(room); // 👈 now towers defend & repair automatically
+        towerManager.run(room);
     }
 
     // Run creeps
@@ -28,6 +28,6 @@ module.exports.loop = function () {
         if (creep.memory.role === 'harvester') roleHarvester.run(creep);
         else if (creep.memory.role === 'upgrader') roleUpgrader.run(creep);
         else if (creep.memory.role === 'builder') roleBuilder.run(creep);
-        else if (creep.memory.role === 'hauler') roleBuilder.run(creep);
+        else if (creep.memory.role === 'hauler') roleHauler.run(creep);
     }
 };
