@@ -1,17 +1,4 @@
-function assignSource(creep) {
-    if (!creep.memory.sourceId) {
-        const sources = creep.room.find(FIND_SOURCES);
-        const sourceUsage = {};
-        for (const s of sources) {
-            sourceUsage[s.id] = _.sum(Game.creeps, c => c.memory.sourceId === s.id);
-        }
-        const targetSource = _.min(sources, s => sourceUsage[s.id]);
-        if (targetSource && targetSource.id) {
-            creep.memory.sourceId = targetSource.id;
-        }
-    }
-    return Game.getObjectById(creep.memory.sourceId);
-}
+const { assignSource } = require('utils/sourceManager');
 
 module.exports = {
     run(creep) {
