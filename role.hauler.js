@@ -1,7 +1,7 @@
 module.exports = {
     run(creep) {
         if (creep.store.getFreeCapacity() > 0) {
-            // === Pick nearest container with energy ===
+            // Pick nearest container with energy
             const container = this.getClosestContainer(creep);
             if (!container) return;
 
@@ -11,7 +11,7 @@ module.exports = {
                 creep.moveTo(container, this.getCachedPath(creep, container));
             }
         } else {
-            // === Deliver to structure needing energy ===
+            // Deliver energy based on priority
             const target = this.getEnergyTarget(creep);
             if (!target) return;
 
@@ -31,12 +31,27 @@ module.exports = {
     },
 
     getEnergyTarget(creep) {
-        const targets = creep.room.find(FIND_STRUCTURES, {
+        // Priority 1: Spawns and extensions needing energy
+        let targets = creep.room.find(FIND_STRUCTURES, {
             filter: s =>
                 (s.structureType === STRUCTURE_SPAWN ||
-                 s.structureType === STRUCTURE_EXTENSION ||
-                 s.structureType === STRUCTURE_TOWER ||
-                 s.structureType === STRUCTURE_STORAGE) &&
+                 s.structureType === STRUCTURE_EXTENSION) &&
+                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+        if (targets.length > 0) return creep.pos.findClosestByPath(targets);
+
+        // Priority 2: Towers needing energy
+        targets = creep.room.find(FIND_STRUCTURES, {
+            filter: s =>
+                s.structureType === STRUCTURE_TOWER &&
+                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+        if (targets.length > 0) return creep.pos.findClosestByPath(targets);
+
+        // Priority 3: Storage (optional, if nothing else needs energy)
+        targets = creep.room.find(FIND_STRUCTURES, {
+            filter: s =>
+                s.structureType === STRUCTURE_STORAGE &&
                 s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         });
         return targets.length > 0 ? creep.pos.findClosestByPath(targets) : null;

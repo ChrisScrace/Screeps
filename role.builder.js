@@ -1,34 +1,36 @@
-const { assignSource } = require('sourceManager');
-
 module.exports = {
     run(creep) {
-        const source = assignSource(creep);
-        if (!source) return;
+        // === If empty, get energy from container/storage ===
+        if (creep.store[RESOURCE_ENERGY] === 0) {
+            const container = creep.pos.findClosestByPath(
+                creep.room.find(FIND_STRUCTURES, {
+                    filter: s =>
+                        (s.structureType === STRUCTURE_CONTAINER || s.structureType === STRUCTURE_STORAGE) &&
+                        s.store[RESOURCE_ENERGY] > 0
+                })
+            );
 
-        if (creep.memory.building && creep.store[RESOURCE_ENERGY] === 0) {
-            creep.memory.building = false;
-        }
-        if (!creep.memory.building && creep.store.getFreeCapacity() === 0) {
-            creep.memory.building = true;
-        }
-
-        if (creep.memory.building) {
-            const site = creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES);
-            if (site) {
-                if (creep.build(site) === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(site, { visualizePathStyle: { stroke: '#ffffff' } });
-                }
-            } else {
-                const controller = creep.room.controller;
-                if (controller && creep.upgradeController(controller) === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(controller);
+            if (container) {
+                if (!creep.pos.isNearTo(container)) {
+                    creep.moveTo(container, { visualizePathStyle: { stroke: '#ffaa00' } });
+                } else {
+                    creep.withdraw(container, RESOURCE_ENERGY);
                 }
             }
+            return; // wait until energy is acquired
+        }
+
+        // === Build construction sites ===
+        const target = creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES);
+        if (target) {
+            if (creep.build(target) === ERR_NOT_IN_RANGE) {
+                creep.moveTo(target, { visualizePathStyle: { stroke: '#ffffff' } });
+            }
         } else {
-            if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
-                creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
+            // Optional: upgrade controller if nothing to build
+            if (creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) {
+                creep.moveTo(creep.room.controller, { visualizePathStyle: { stroke: '#ffffff' } });
             }
         }
     }
 };
-
