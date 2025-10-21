@@ -1,5 +1,23 @@
+function assignSource(creep) {
+    if (!creep.memory.sourceId) {
+        const sources = creep.room.find(FIND_SOURCES);
+        const sourceUsage = {};
+        for (const s of sources) {
+            sourceUsage[s.id] = _.sum(Game.creeps, c => c.memory.sourceId === s.id);
+        }
+        const targetSource = _.min(sources, s => sourceUsage[s.id]);
+        if (targetSource && targetSource.id) {
+            creep.memory.sourceId = targetSource.id;
+        }
+    }
+    return Game.getObjectById(creep.memory.sourceId);
+}
+
 module.exports = {
     run(creep) {
+        const source = assignSource(creep);
+        if (!source) return;
+
         if (creep.memory.building && creep.store[RESOURCE_ENERGY] === 0) {
             creep.memory.building = false;
         }
@@ -14,17 +32,16 @@ module.exports = {
                     creep.moveTo(site, { visualizePathStyle: { stroke: '#ffffff' } });
                 }
             } else {
-                // Nothing to build, fallback to upgrading
                 const controller = creep.room.controller;
                 if (controller && creep.upgradeController(controller) === ERR_NOT_IN_RANGE) {
                     creep.moveTo(controller);
                 }
             }
         } else {
-            const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
-            if (source && creep.harvest(source) === ERR_NOT_IN_RANGE) {
+            if (creep.harvest(source) === ERR_NOT_IN_RANGE) {
                 creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
             }
         }
     }
 };
+
