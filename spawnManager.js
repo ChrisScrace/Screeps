@@ -1,7 +1,13 @@
+const sourceManager = require('sourceManager');
+
 module.exports = {
     run() {
         const spawn = Game.spawns['Spawn1'];
         if (!spawn) return;
+        const room = spawn.room;
+
+        // Initialize source memory
+        sourceManager.initRoom(room);
 
         if (spawn.spawning) {
             const spawningCreep = Game.creeps[spawn.spawning.name];
@@ -14,7 +20,6 @@ module.exports = {
             return;
         }
 
-        const room = spawn.room;
         const energyAvailable = room.energyAvailable;
 
         const creepsByRole = _.groupBy(Game.creeps, c => c.memory.role);
@@ -23,24 +28,16 @@ module.exports = {
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
         const numBuilders = (creepsByRole['builder'] || []).length;
 
-        const constructionSites = room.find(FIND_CONSTRUCTION_SITES).length;
-        const sources = room.find(FIND_SOURCES);
+        // Dynamic target numbers
+        const freeTileCount = Object.values(Memory.rooms[room.name].sources)
+                                   .reduce((sum, s) => sum + s.tiles.length, 0);
 
-        // === Target numbers ===
-        let targetHarvesters = sources.length * 2;
-        let targetHaulers = sources.length;
+        let targetHarvesters = freeTileCount;
+        let targetHaulers = freeTileCount; // 1 hauler per source tile
         let targetUpgraders = 2;
-        let targetBuilders = constructionSites > 5 ? 2 : 1;
+        let targetBuilders = room.find(FIND_CONSTRUCTION_SITES).length > 5 ? 2 : 1;
 
-        if (energyAvailable < 300) targetHarvesters++;
-        if (room.controller.level >= 3) {
-            targetHarvesters++;
-            targetHaulers++;
-            targetUpgraders++;
-            targetBuilders++;
-        }
-
-        // === Decide which role to spawn ===
+        // Prioritize spawning
         let roleToSpawn = null;
         if (numHarvesters < targetHarvesters) roleToSpawn = 'harvester';
         else if (numHaulers < targetHaulers) roleToSpawn = 'hauler';
@@ -52,36 +49,20 @@ module.exports = {
         const body = this.getBodyForRole(roleToSpawn, energyAvailable);
         const newName = `${roleToSpawn}${Game.time}`;
         const result = spawn.spawnCreep(body, newName, { memory: { role: roleToSpawn } });
-
-        if (result === OK) {
-            console.log(`Spawning new ${roleToSpawn}: ${newName} (${body.length} parts)`);
-        }
+        if (result === OK) console.log(`Spawning new ${roleToSpawn}: ${newName} (${body.length} parts)`);
     },
 
     getBodyForRole(role, energy) {
         switch (role) {
-            case 'harvester':
-                if (energy >= 550) return [WORK, WORK, CARRY, MOVE, MOVE];
-                if (energy >= 350) return [WORK, CARRY, MOVE, MOVE];
-                return [WORK, CARRY, MOVE];
-
-            case 'hauler':
-                if (energy >= 550) return [CARRY, CARRY, MOVE, MOVE, MOVE];
-                if (energy >= 350) return [CARRY, CARRY, MOVE, MOVE];
-                return [CARRY, MOVE, MOVE];
-
-            case 'upgrader':
-                if (energy >= 550) return [WORK, WORK, CARRY, MOVE, MOVE];
-                if (energy >= 350) return [WORK, CARRY, MOVE, MOVE];
-                return [WORK, CARRY, MOVE];
-
-            case 'builder':
-                if (energy >= 550) return [WORK, WORK, CARRY, MOVE, MOVE];
-                if (energy >= 350) return [WORK, CARRY, MOVE, MOVE];
-                return [WORK, CARRY, MOVE];
-
-            default:
-                return [WORK, CARRY, MOVE];
+            case 'harvester': return energy >= 550 ? [WORK, WORK, CARRY, MOVE, MOVE] :
+                                         energy >= 350 ? [WORK, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
+            case 'hauler': return energy >= 550 ? [CARRY, CARRY, MOVE, MOVE, MOVE] :
+                                  energy >= 350 ? [CARRY, CARRY, MOVE, MOVE] : [CARRY, MOVE, MOVE];
+            case 'upgrader': return energy >= 550 ? [WORK, WORK, CARRY, MOVE, MOVE] :
+                                    energy >= 350 ? [WORK, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
+            case 'builder': return energy >= 550 ? [WORK, WORK, CARRY, MOVE, MOVE] :
+                                   energy >= 350 ? [WORK, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
+            default: return [WORK, CARRY, MOVE];
         }
     }
 };
