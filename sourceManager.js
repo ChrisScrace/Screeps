@@ -4,6 +4,12 @@ module.exports = {
      * Safe to call every tick — it only rebuilds if needed.
      */
     initRoom(room) {
+
+        if (Memory.rooms[room.name].sourceTiles) {
+            delete Memory.rooms[room.name].sourceTiles;
+        }
+
+
         if (!Memory.rooms) Memory.rooms = {};
         if (!Memory.rooms[room.name]) Memory.rooms[room.name] = {};
         if (!Memory.rooms[room.name].sources) Memory.rooms[room.name].sources = {};
