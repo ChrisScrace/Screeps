@@ -45,8 +45,6 @@ module.exports = {
 
             Memory.rooms[room.name].sources[source.id] = { tiles };
         }
-
-        console.log(`Initialized ${sources.length} sources in room ${room.name}`);
     },
 
     // ----------------------
