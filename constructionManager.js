@@ -1,8 +1,10 @@
+const { planRoads } = require('roadPlanner');
+
 module.exports = {
     run(room) {
         if (!room.controller || !room.controller.my) return;
 
-        // Limit total construction sites
+        // Limit total construction sites to avoid spam
         if (room.find(FIND_CONSTRUCTION_SITES).length > 10) return;
 
         // === AUTO-BUILD EXTENSIONS ===
@@ -16,13 +18,9 @@ module.exports = {
         if (extensions.length < maxExtensions) {
             const spawn = room.find(FIND_MY_SPAWNS)[0];
             if (spawn) {
-                // Try placing new extensions in a spiral pattern around spawn
                 this.buildNear(spawn.pos, STRUCTURE_EXTENSION, room);
             }
         }
-
-        // === AUTO-BUILD ROADS ===
-        this.buildRoads(room);
 
         // === AUTO-BUILD TOWER AT RCL >= 3 ===
         if (room.controller.level >= 3) {
@@ -34,9 +32,17 @@ module.exports = {
                 }
             }
         }
+
+        // === ROADS handled by roadPlanner module ===
+        // Run adaptive road planning
+        if (Game.time % 100 === 0) { // throttle road planning to every 100 ticks
+            planRoads(room);
+        }
     },
 
-    // Try placing a structure in a spiral pattern around a position
+    /**
+     * Try placing a structure in a spiral pattern around a position
+     */
     buildNear(pos, structureType, room) {
         for (let dx = -3; dx <= 3; dx++) {
             for (let dy = -3; dy <= 3; dy++) {
@@ -46,36 +52,6 @@ module.exports = {
                     console.log(`Placed ${structureType} at ${x},${y}`);
                     return;
                 }
-            }
-        }
-    },
-
-    // Builds roads between important targets
-    buildRoads(room) {
-        const spawn = room.find(FIND_MY_SPAWNS)[0];
-        if (!spawn) return;
-
-        const sources = room.find(FIND_SOURCES);
-        const controller = room.controller;
-
-        // Roads: Spawn → each Source
-        for (const source of sources) {
-            this.buildPath(room, spawn.pos, source.pos);
-        }
-
-        // Roads: Spawn → Controller
-        if (controller) this.buildPath(room, spawn.pos, controller.pos);
-    },
-
-    // Creates road construction sites along a path
-    buildPath(room, startPos, endPos) {
-        const path = room.findPath(startPos, endPos, { ignoreCreeps: true });
-        for (const step of path) {
-            const pos = new RoomPosition(step.x, step.y, room.name);
-            const hasRoad = pos.lookFor(LOOK_STRUCTURES).some(s => s.structureType === STRUCTURE_ROAD);
-            const hasSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).some(s => s.structureType === STRUCTURE_ROAD);
-            if (!hasRoad && !hasSite) {
-                room.createConstructionSite(pos, STRUCTURE_ROAD);
             }
         }
     }
