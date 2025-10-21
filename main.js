@@ -18,6 +18,7 @@ module.exports.loop = function () {
         const room = Game.rooms[roomName];
         if (!room.controller || !room.controller.my) continue;
 
+        spawnManager.run(room);
         sourceManager.initRoom(room);
         constructionManager.run(room);
         towerManager.run(room);
