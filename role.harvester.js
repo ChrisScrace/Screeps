@@ -2,7 +2,7 @@ const sourceManager = require('sourceManager');
 
 module.exports = {
     run(creep) {
-        // Assign a source if not already assigned
+        // Assign source
         if (!creep.memory.sourceId) {
             const source = creep.pos.findClosestByPath(FIND_SOURCES);
             if (!source) return;
@@ -12,10 +12,10 @@ module.exports = {
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) return;
 
-        // Assign a free tile next to the source
+        // Assign tile
         if (!creep.memory.tile) {
             const tile = sourceManager.assignTile(source.id, creep.name, creep.room.name);
-            if (!tile) return; // no free tile
+            if (!tile) return;
             creep.memory.tile = tile;
         }
 
@@ -27,21 +27,43 @@ module.exports = {
             return;
         }
 
-        // Harvest energy if on tile and not full
+        // Harvest energy
         if (creep.store.getFreeCapacity() > 0) {
             creep.harvest(source);
         }
 
-        // Deposit energy if available
-        if (creep.store[RESOURCE_ENERGY] > 0) {
-            const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
-                filter: s => s.structureType === STRUCTURE_CONTAINER
-            })[0];
+        // Determine if any haulers exist
+        const haulers = _.filter(Game.creeps, c => c.memory.role === 'hauler');
+        const hasHaulers = haulers.length > 0;
 
-            if (container) {
+        // Find container near source
+        const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
+            filter: s => s.structureType === STRUCTURE_CONTAINER
+        })[0];
+
+        // Deposit energy
+        if (creep.store[RESOURCE_ENERGY] > 0) {
+            if (container && hasHaulers) {
+                // Normal case: let haulers pick up
                 creep.transfer(container, RESOURCE_ENERGY);
             } else {
-                creep.drop(RESOURCE_ENERGY);
+                // No haulers or no container: self-haul to spawn/extensions
+                const targets = creep.room.find(FIND_MY_STRUCTURES, {
+                    filter: s => 
+                        (s.structureType === STRUCTURE_SPAWN ||
+                         s.structureType === STRUCTURE_EXTENSION ||
+                         s.structureType === STRUCTURE_STORAGE) &&
+                        s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+                });
+                if (targets.length > 0) {
+                    const target = creep.pos.findClosestByPath(targets);
+                    if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                        creep.moveTo(target, { visualizePathStyle: { stroke: '#00ff00' } });
+                    }
+                } else {
+                    // Drop on ground if nowhere else
+                    creep.drop(RESOURCE_ENERGY);
+                }
             }
         }
     },
