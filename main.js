@@ -12,6 +12,13 @@ module.exports.loop = function () {
         if (!Game.creeps[name]) delete Memory.creeps[name];
     }
 
+    for (const roomName in Game.rooms) {
+        const room = Game.rooms[roomName];
+        if (room.controller && room.controller.my) {
+            sourceManager.initRoom(room); // 🔹 always ensure memory is fresh
+        }
+    }
+
     spawnManager.run();
 
     // Room-wide managers
