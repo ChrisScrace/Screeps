@@ -17,6 +17,7 @@ module.exports = {
             spawn.spawnCreep([WORK, CARRY, MOVE], newName, { memory: { role: 'builder' } });
         }
 
+        //this is a test comment
         if (spawn.spawning) {
             const spawningCreep = Game.creeps[spawn.spawning.name];
             spawn.room.visual.text(
