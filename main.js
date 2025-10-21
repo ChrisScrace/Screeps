@@ -5,6 +5,7 @@ const roleBuilder = require('role.builder');
 const spawnManager = require('spawnManager');
 const constructionManager = require('constructionManager');
 const towerManager = require('towerManager');
+const sourceManager = require('sourceManager');
 
 module.exports.loop = function () {
     // Clean up memory
