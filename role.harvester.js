@@ -2,6 +2,7 @@ const sourceManager = require('sourceManager');
 
 module.exports = {
     run(creep) {
+        // Assign a source if not already assigned
         if (!creep.memory.sourceId) {
             const source = creep.pos.findClosestByPath(FIND_SOURCES);
             if (!source) return;
@@ -11,37 +12,35 @@ module.exports = {
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) return;
 
-        // Reserve a tile
+        // Assign a free tile next to the source
         if (!creep.memory.tile) {
             const tile = sourceManager.assignTile(source.id, creep.name, creep.room.name);
             if (!tile) return; // no free tile
             creep.memory.tile = tile;
         }
 
-        // Move to reserved tile
-        if (creep.pos.x !== creep.memory.tile.x || creep.pos.y !== creep.memory.tile.y) {
-            creep.moveTo(creep.memory.tile.x, creep.memory.tile.y, { visualizePathStyle: { stroke: '#ffaa00' } });
+        const targetPos = new RoomPosition(creep.memory.tile.x, creep.memory.tile.y, creep.room.name);
+
+        // Move to assigned tile
+        if (!creep.pos.isEqualTo(targetPos)) {
+            creep.moveTo(targetPos, { visualizePathStyle: { stroke: '#ffaa00' } });
             return;
         }
 
-        // Find nearby container
-        const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
-            filter: s => s.structureType === STRUCTURE_CONTAINER
-        })[0];
-
-        // Harvest energy
+        // Harvest energy if on tile and not full
         if (creep.store.getFreeCapacity() > 0) {
             creep.harvest(source);
         }
 
-        // Deposit energy
-        if (container) {
-            if (creep.store[RESOURCE_ENERGY] > 0) {
+        // Deposit energy if available
+        if (creep.store[RESOURCE_ENERGY] > 0) {
+            const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
+                filter: s => s.structureType === STRUCTURE_CONTAINER
+            })[0];
+
+            if (container) {
                 creep.transfer(container, RESOURCE_ENERGY);
-            }
-        } else {
-            // Drop energy on the ground if no container exists
-            if (creep.store[RESOURCE_ENERGY] > 0) {
+            } else {
                 creep.drop(RESOURCE_ENERGY);
             }
         }

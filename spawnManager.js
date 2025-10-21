@@ -4,7 +4,8 @@ const roleBodies = {
     harvester: (energy) => {
         const body = [];
         let cost = 0;
-        while (cost + 200 <= energy && body.length < 15) { // cap
+        // Early game: spawn small harvesters first if under full tiles
+        while (cost + 200 <= energy && body.length < 9) { // cap smaller for quick fill
             body.push(WORK, CARRY, MOVE);
             cost += 200;
         }
@@ -46,36 +47,46 @@ module.exports = {
 
         const room = spawn.room;
         const energyAvailable = room.energyAvailable;
-        if (!Memory.rooms[room.name].sources) sourceManager.initRoom(room);
 
+        if (!Memory.rooms[room.name].sources) sourceManager.initRoom(room);
         const sources = Memory.rooms[room.name].sources;
         const creepsByRole = _.groupBy(Game.creeps, c => c.memory.role);
 
-        // === HARVESTERS: fill all free tiles ===
+        // =====================
+        // HARVESTERS: Fill free tiles
+        // =====================
         const harvesters = creepsByRole['harvester'] || [];
-        let harvestersPerSource = {};
-        for (const sId in sources) harvestersPerSource[sId] = 0;
-        for (const h of harvesters) {
-            if (h.memory.sourceId) harvestersPerSource[h.memory.sourceId]++;
-        }
         let sourceToSpawn = null;
+        let maxFree = -1;
+
         for (const sId in sources) {
-            if (sources[sId].tiles.length > harvestersPerSource[sId]) {
+            const freeTiles = sources[sId].tiles.length - harvesters.filter(h => h.memory.sourceId === sId).length;
+            if (freeTiles > maxFree) {
+                maxFree = freeTiles;
                 sourceToSpawn = sId;
-                break;
             }
         }
-        if (sourceToSpawn) return this.spawnCreep(spawn, 'harvester', sourceToSpawn, energyAvailable);
 
-        // === HAULERS: spawn if needed ===
+        if (sourceToSpawn && maxFree > 0) {
+            return this.spawnCreep(spawn, 'harvester', sourceToSpawn, energyAvailable);
+        }
+
+        // =====================
+        // HAULERS: spawn if dropped energy exceeds haulers
+        // =====================
         const haulers = creepsByRole['hauler'] || [];
-        const freeEnergy = room.find(FIND_DROPPED_RESOURCES, {filter: r => r.resourceType === RESOURCE_ENERGY});
-        if (freeEnergy.length > haulers.length) return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
+        const freeEnergy = room.find(FIND_DROPPED_RESOURCES, { filter: r => r.resourceType === RESOURCE_ENERGY });
+        if (freeEnergy.length > haulers.length) {
+            return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
+        }
 
-        // === UPGRADERS / BUILDERS ===
+        // =====================
+        // UPGRADERS / BUILDERS
+        // =====================
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
         const numBuilders = (creepsByRole['builder'] || []).length;
         const constructionSites = room.find(FIND_CONSTRUCTION_SITES).length;
+
         const targetUpgraders = room.controller.level >= 3 ? 3 : 2;
         const targetBuilders = constructionSites > 5 ? 2 : 1;
 
