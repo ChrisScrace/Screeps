@@ -1,52 +1,68 @@
 /**
  * sourceManager
- * Tracks free/occupied tiles around each source in each room
+ * Manages tile assignment for sources and keeps track of free/occupied tiles.
  */
 
-const memory = () => {
-    if (!Memory.sourceTiles) Memory.sourceTiles = {};
-    return Memory.sourceTiles;
-};
-
 module.exports = {
-    /**
-     * Assign a free tile to a creep next to a source
-     * @param {string} sourceId 
-     * @param {string} creepName
-     * @param {string} roomName
-     * @returns {object|null} tile {x, y} or null if none available
-     */
+    // ----------------------
+    // Memory helper
+    // ----------------------
+    memory() {
+        if (!Memory.sourceTiles) Memory.sourceTiles = {};
+        return Memory.sourceTiles;
+    },
+
+    // ----------------------
+    // Initialize a room: store all free tiles around sources
+    // ----------------------
+    initRoom(room) {
+        if (!Memory.rooms) Memory.rooms = {};
+        if (!Memory.rooms[room.name]) Memory.rooms[room.name] = {};
+        if (!Memory.rooms[room.name].sources) Memory.rooms[room.name].sources = {};
+
+        const sources = room.find(FIND_SOURCES);
+
+        for (const source of sources) {
+            const tiles = [];
+
+            // Scan all tiles around the source (1 tile radius)
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    if (dx === 0 && dy === 0) continue; // skip source itself
+                    const x = source.pos.x + dx;
+                    const y = source.pos.y + dy;
+                    if (x < 0 || x > 49 || y < 0 || y > 49) continue;
+
+                    const terrain = room.getTerrain().get(x, y);
+                    if (terrain === TERRAIN_MASK_WALL) continue;
+
+                    const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
+                    if (hasStructure) continue;
+
+                    tiles.push({ x, y });
+                }
+            }
+
+            Memory.rooms[room.name].sources[source.id] = { tiles };
+        }
+
+        console.log(`Initialized ${sources.length} sources in room ${room.name}`);
+    },
+
+    // ----------------------
+    // Assign a free tile next to a source for a creep
+    // ----------------------
     assignTile(sourceId, creepName, roomName) {
-        const mem = memory();
+        const mem = this.memory();
         if (!mem[roomName]) mem[roomName] = {};
         if (!mem[roomName][sourceId]) mem[roomName][sourceId] = {};
 
         const assignedTiles = mem[roomName][sourceId];
+        const sourceData = Memory.rooms[roomName]?.sources[sourceId];
+        if (!sourceData) return null;
 
-        const source = Game.getObjectById(sourceId);
-        if (!source) return null;
-
-        // Scan all tiles around source (1 tile radius)
-        const positions = [];
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                if (dx === 0 && dy === 0) continue; // skip the source tile itself
-                const x = source.pos.x + dx;
-                const y = source.pos.y + dy;
-                if (x < 0 || x > 49 || y < 0 || y > 49) continue;
-
-                const terrain = source.room.getTerrain().get(x, y);
-                if (terrain === TERRAIN_MASK_WALL) continue;
-
-                const hasStructure = source.room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
-                if (hasStructure) continue;
-
-                positions.push({ x, y });
-            }
-        }
-
-        // Find a free tile
-        for (const pos of positions) {
+        // Loop through all possible tiles
+        for (const pos of sourceData.tiles) {
             const key = `${pos.x},${pos.y}`;
             if (!assignedTiles[key]) {
                 assignedTiles[key] = creepName;
@@ -54,19 +70,14 @@ module.exports = {
             }
         }
 
-        // No free tile found
-        return null;
+        return null; // no free tile
     },
 
-    /**
-     * Release a tile when creep dies or is reassigned
-     * @param {string} sourceId 
-     * @param {string} creepName 
-     * @param {string} roomName 
-     * @param {object} tile {x, y}
-     */
+    // ----------------------
+    // Release a tile when creep dies
+    // ----------------------
     releaseTile(sourceId, creepName, roomName, tile) {
-        const mem = memory();
+        const mem = this.memory();
         if (!mem[roomName] || !mem[roomName][sourceId]) return;
 
         const key = `${tile.x},${tile.y}`;
@@ -75,11 +86,11 @@ module.exports = {
         }
     },
 
-    /**
-     * Optional: clean up invalid assignments (e.g., creep died without calling onDeath)
-     */
+    // ----------------------
+    // Cleanup orphaned tiles
+    // ----------------------
     cleanup() {
-        const mem = memory();
+        const mem = this.memory();
         for (const roomName in mem) {
             for (const sourceId in mem[roomName]) {
                 for (const key in mem[roomName][sourceId]) {
