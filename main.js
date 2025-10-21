@@ -28,5 +28,6 @@ module.exports.loop = function () {
         if (creep.memory.role === 'harvester') roleHarvester.run(creep);
         else if (creep.memory.role === 'upgrader') roleUpgrader.run(creep);
         else if (creep.memory.role === 'builder') roleBuilder.run(creep);
+        else if (creep.memory.role === 'hauler') roleBuilder.run(creep);
     }
 };
