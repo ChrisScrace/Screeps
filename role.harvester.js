@@ -2,7 +2,10 @@ const sourceManager = require('sourceManager');
 
 module.exports = {
     run(creep) {
-        // === ASSIGN SOURCE ===
+        const room = creep.room;
+        sourceManager.initRoom(room);
+
+        // Assign source if needed
         if (!creep.memory.sourceId) {
             const source = creep.pos.findClosestByPath(FIND_SOURCES);
             if (!source) return;
@@ -12,56 +15,36 @@ module.exports = {
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) return;
 
-        // === ASSIGN TILE FROM SOURCE MANAGER ===
+        // Assign a free tile
         if (!creep.memory.tile) {
-            const tile = sourceManager.assignTile(source.id, creep.name, creep.room.name);
-            if (!tile) return; // no free tile available
+            const tile = sourceManager.assignTile(source.id, creep.name, room.name);
+            if (!tile) return;
             creep.memory.tile = tile;
         }
 
-        const targetPos = new RoomPosition(creep.memory.tile.x, creep.memory.tile.y, creep.room.name);
+        const targetPos = new RoomPosition(creep.memory.tile.x, creep.memory.tile.y, room.name);
 
-        // === MOVE TO ASSIGNED TILE ===
+        // Move to tile
         if (!creep.pos.isEqualTo(targetPos)) {
             creep.moveTo(targetPos, { visualizePathStyle: { stroke: '#ffaa00' } });
             return;
         }
 
-        // === HARVEST ===
+        // Harvest
         if (creep.store.getFreeCapacity() > 0) {
             creep.harvest(source);
         }
 
-        // === DEPOSIT ENERGY ===
-        if (creep.store[RESOURCE_ENERGY] > 0) {
-            // Find the closest container within 1 tile of the source
-            const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
-                filter: s => s.structureType === STRUCTURE_CONTAINER
-            })[0];
-
-            if (container) {
-                // ✅ If in range (1 tile away), transfer directly
-                if (creep.pos.inRangeTo(container, 1)) {
-                    creep.transfer(container, RESOURCE_ENERGY);
-                } else {
-                    // Move closer if not yet in range
-                    creep.moveTo(container, { visualizePathStyle: { stroke: '#ffaa00' } });
-                }
-            } else {
-                // ❌ No container nearby — drop energy on ground
-                creep.drop(RESOURCE_ENERGY);
-            }
+        // Transfer energy to nearest container
+        const container = creep.pos.findInRange(FIND_STRUCTURES, 1, { filter: s => s.structureType === STRUCTURE_CONTAINER })[0];
+        if (container && creep.store[RESOURCE_ENERGY] > 0) {
+            creep.transfer(container, RESOURCE_ENERGY);
         }
     },
 
     onDeath(creep) {
-        if (creep.memory.tile) {
-            sourceManager.releaseTile(
-                creep.memory.sourceId,
-                creep.name,
-                creep.room.name,
-                creep.memory.tile
-            );
+        if (creep.memory.sourceId) {
+            sourceManager.releaseTile(creep.memory.sourceId, creep.name, creep.room.name);
         }
     }
 };

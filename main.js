@@ -1,35 +1,47 @@
-const roleHarvester = require('role.harvester');
-const roleUpgrader = require('role.upgrader');
-const roleHauler = require('role.hauler');
-const roleBuilder = require('role.builder');
 const spawnManager = require('spawnManager');
 const constructionManager = require('constructionManager');
-const towerManager = require('towerManager');
 const sourceManager = require('sourceManager');
+const roles = {
+    harvester: require('role.harvester'),
+    hauler: require('role.hauler'),
+    upgrader: require('role.upgrader'),
+    builder: require('role.builder')
+};
 
-module.exports.loop = function () {
-    // Clean up memory
-    for (let name in Memory.creeps) {
-        if (!Game.creeps[name]) delete Memory.creeps[name];
+module.exports.loop = function() {
+    // --- CLEANUP DEAD CREEPS ---
+    for (const name in Memory.creeps) {
+        if (!Game.creeps[name]) {
+            const creepMemory = Memory.creeps[name];
+            // Release source tile if assigned
+            if (creepMemory.sourceId && creepMemory.tile) {
+                sourceManager.releaseTile(creepMemory.sourceId, name, creepMemory.roomName);
+            }
+            delete Memory.creeps[name];
+        }
     }
 
-    // Room-wide managers
+    // --- RUN ROOM LOGIC ---
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
         if (!room.controller || !room.controller.my) continue;
 
-        spawnManager.run(room);
+        // Initialize source memory
         sourceManager.initRoom(room);
+
+        // Manage spawns
+        spawnManager.run(room);
+
+        // Manage construction
         constructionManager.run(room);
-        towerManager.run(room);
     }
 
-    // Run creeps
-    for (let name in Game.creeps) {
+    // --- RUN CREEPS ---
+    for (const name in Game.creeps) {
         const creep = Game.creeps[name];
-        if (creep.memory.role === 'harvester') roleHarvester.run(creep);
-        else if (creep.memory.role === 'upgrader') roleUpgrader.run(creep);
-        else if (creep.memory.role === 'builder') roleBuilder.run(creep);
-        else if (creep.memory.role === 'hauler') roleHauler.run(creep);
+        const role = creep.memory.role;
+        if (roles[role]) {
+            roles[role].run(creep);
+        }
     }
 };

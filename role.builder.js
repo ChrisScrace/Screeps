@@ -1,58 +1,34 @@
-const energyManager = require('energyManager');
-
 module.exports = {
     run(creep) {
-        // -----------------------
-        // Switch mode between building and refilling
-        // -----------------------
         if (creep.memory.building && creep.store[RESOURCE_ENERGY] === 0) {
             creep.memory.building = false;
-            creep.say('🔄 refill');
         }
         if (!creep.memory.building && creep.store.getFreeCapacity() === 0) {
             creep.memory.building = true;
-            creep.say('🚧 build');
         }
 
-        // -----------------------
-        // BUILDING MODE
-        // -----------------------
-        if (creep.memory.building) {
-            const target = this.findConstruction(creep);
-            if (target) {
-                if (creep.build(target) === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(target, { visualizePathStyle: { stroke: '#ffffff' } });
-                }
-            } else {
-                // If no construction, help upgrade the controller
-                const controller = creep.room.controller;
-                if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(controller, { visualizePathStyle: { stroke: '#ffffff' } });
+        if (!creep.memory.building) {
+            // Collect energy
+            const source = creep.pos.findClosestByPath(FIND_STRUCTURES, {
+                filter: s => s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 0
+            });
+            if (source) {
+                if (creep.withdraw(source, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(source);
                 }
             }
+        } else {
+            // Build stuff
+            const site = creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES);
+            if (site) {
+                if (creep.build(site) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(site, { visualizePathStyle: { stroke: '#ffffff' } });
+                }
+            } else {
+                // Idle near spawn
+                const spawn = creep.room.find(FIND_MY_SPAWNS)[0];
+                if (spawn) creep.moveTo(spawn);
+            }
         }
-        // -----------------------
-        // REFILL MODE
-        // -----------------------
-        else {
-            energyManager.fetchEnergy(creep);
-        }
-    },
-
-    // -----------------------
-    // Construction priority
-    // -----------------------
-    findConstruction(creep) {
-        const sites = creep.room.find(FIND_CONSTRUCTION_SITES);
-        const priorities = {
-            [STRUCTURE_CONTAINER]: 1,
-            [STRUCTURE_EXTENSION]: 2,
-            [STRUCTURE_TOWER]: 3,
-            [STRUCTURE_ROAD]: 4,
-            [STRUCTURE_SPAWN]: 5
-        };
-
-        sites.sort((a, b) => (priorities[a.structureType] || 99) - (priorities[b.structureType] || 99));
-        return sites[0] || null;
     }
 };

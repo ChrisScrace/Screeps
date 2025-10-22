@@ -1,120 +1,94 @@
-const sourceManager = require('sourceManager');
-
 module.exports = {
     run(room) {
+        // Only build if you own the room
         if (!room.controller || !room.controller.my) return;
 
-        // === BUILD SOURCE CONTAINERS AT ALL SOURCE TILES ===
+        // Don’t build too many at once
+        const maxSites = 10;
+        const sites = room.find(FIND_CONSTRUCTION_SITES);
+        if (sites.length >= maxSites) return;
+
+        // Build containers near sources first
         this.buildSourceContainers(room);
 
-        // === CONSTRUCTION SITE LIMIT CHECK ===
-        const currentSites = room.find(FIND_CONSTRUCTION_SITES).length;
-        const maxSites = room.controller.level <= 2 ? 10 :
-                         room.controller.level <= 5 ? 25 : 50;
-        if (currentSites >= maxSites) return;
-
-        const spawns = room.find(FIND_MY_SPAWNS);
-        if (!spawns.length) return;
-        const spawn = spawns[0];
-
-        // === AUTO-BUILD EXTENSIONS & TOWERS ===
-        this.buildExtensions(spawn, room);
-        this.buildTowers(spawn, room);
-
-        // === ROADS ===
-        if (currentSites === 0 && Game.time % 100 === 0) {
-            const { planRoads } = require('roadPlanner');
-            planRoads(room);
-        }
+        // Then build extensions near spawn
+        this.buildExtensions(room);
     },
 
+    /**
+     * Build a container next to each source if none exists.
+     */
     buildSourceContainers(room) {
         const sources = room.find(FIND_SOURCES);
-
         for (const source of sources) {
-            // Get all tiles registered for this source from sourceManager
-            const tiles = sourceManager.getTilesForSource(source.id, room.name);
-            if (!tiles || tiles.length === 0) continue;
+            // Skip if a container already exists or is under construction nearby
+            const nearbyContainer = source.pos.findInRange(FIND_STRUCTURES, 1, {
+                filter: s => s.structureType === STRUCTURE_CONTAINER
+            });
+            const nearbySite = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, {
+                filter: s => s.structureType === STRUCTURE_CONTAINER
+            });
+            if (nearbyContainer.length > 0 || nearbySite.length > 0) continue;
 
-            for (const tile of tiles) {
-                const x = tile.x;
-                const y = tile.y;
+            // Find first walkable tile around the source
+            const terrain = room.getTerrain();
+            const offsets = [
+                { x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 },
+                { x: 1, y: -1 }, { x: 1, y: 1 }, { x: -1, y: 1 }, { x: -1, y: -1 }
+            ];
 
-                // Skip invalid terrain or blocked spots
-                if (!this.isValidConstructionSite(x, y, room)) continue;
+            for (const o of offsets) {
+                const x = source.pos.x + o.x;
+                const y = source.pos.y + o.y;
+                if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
 
-                // Skip if a container already exists nearby
-                const hasContainer = room.lookForAt(LOOK_STRUCTURES, x, y)
-                    .some(s => s.structureType === STRUCTURE_CONTAINER);
-                const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y)
-                    .some(s => s.structureType === STRUCTURE_CONTAINER);
-                if (hasContainer || hasSite) continue;
-
-                // Try to place a container construction site
-                const result = room.createConstructionSite(x, y, STRUCTURE_CONTAINER);
-                if (result === OK) {
-                    console.log(`[ConstructionManager] Container construction started at ${x},${y} near ${source.id}`);
+                const structures = room.lookForAt(LOOK_STRUCTURES, x, y);
+                const sites = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y);
+                if (structures.length === 0 && sites.length === 0) {
+                    room.createConstructionSite(x, y, STRUCTURE_CONTAINER);
+                    break;
                 }
             }
         }
     },
 
-    buildExtensions(spawn, room) {
-        const extensions = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_EXTENSION });
-        const extensionLimits = { 1: 0, 2: 5, 3: 10, 4: 20, 5: 30, 6: 40, 7: 50, 8: 60 };
-        const maxExtensions = extensionLimits[room.controller.level] || 0;
-        const toBuild = maxExtensions - extensions.length;
-        if (toBuild <= 0) return;
-        this.buildExtensionGrid(spawn.pos, room, toBuild);
-    },
+    /**
+     * Build extensions near your spawn (one ring per level).
+     */
+    buildExtensions(room) {
+        const spawns = room.find(FIND_MY_SPAWNS);
+        if (spawns.length === 0) return;
 
-    buildTowers(spawn, room) {
-        if (room.controller.level < 3) return;
-        const towers = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_TOWER });
-        const maxTowers = 1;
-        const toBuild = maxTowers - towers.length;
-        if (toBuild <= 0) return;
-        this.buildTowerGrid(spawn.pos, room, toBuild);
-    },
+        const spawn = spawns[0];
+        const extensions = room.find(FIND_STRUCTURES, {
+            filter: s => s.structureType === STRUCTURE_EXTENSION
+        });
 
-    buildExtensionGrid(center, room, count) {
-        let placed = 0;
-        for (let radius = 2; radius <= 5 && placed < count; radius++) {
-            for (let dx = -radius; dx <= radius && placed < count; dx++) {
-                for (let dy = -radius; dy <= radius && placed < count; dy++) {
+        // Controller level limits
+        const limits = { 1: 0, 2: 5, 3: 10, 4: 20, 5: 30, 6: 40, 7: 50, 8: 60 };
+        const maxExtensions = limits[room.controller.level] || 0;
+
+        if (extensions.length >= maxExtensions) return;
+
+        // Try to place extensions in expanding squares around spawn
+        for (let radius = 2; radius <= 5; radius++) {
+            for (let dx = -radius; dx <= radius; dx++) {
+                for (let dy = -radius; dy <= radius; dy++) {
                     if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
-                    const x = center.x + dx;
-                    const y = center.y + dy;
-                    if (!this.isValidConstructionSite(x, y, room)) continue;
-                    if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) placed++;
+
+                    const x = spawn.pos.x + dx;
+                    const y = spawn.pos.y + dy;
+                    const terrain = room.getTerrain().get(x, y);
+                    if (terrain === TERRAIN_MASK_WALL) continue;
+
+                    const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
+                    const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
+                    if (!hasStructure && !hasSite) {
+                        room.createConstructionSite(x, y, STRUCTURE_EXTENSION);
+                        return; // Only build one per tick to stay safe
+                    }
                 }
             }
         }
-    },
-
-    buildTowerGrid(center, room, count) {
-        const offsets = [
-            { x: -2, y: -2 },
-            { x: 2, y: -2 },
-            { x: -2, y: 2 },
-            { x: 2, y: 2 }
-        ];
-        let placed = 0;
-        for (const offset of offsets) {
-            if (placed >= count) break;
-            const x = center.x + offset.x;
-            const y = center.y + offset.y;
-            if (!this.isValidConstructionSite(x, y, room)) continue;
-            if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) placed++;
-        }
-    },
-
-    isValidConstructionSite(x, y, room) {
-        if (x < 1 || x > 48 || y < 1 || y > 48) return false;
-        const terrain = room.getTerrain().get(x, y);
-        if (terrain === TERRAIN_MASK_WALL) return false;
-        const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
-        const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
-        return !hasStructure && !hasSite;
     }
 };
