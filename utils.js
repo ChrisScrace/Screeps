@@ -53,3 +53,5 @@ module.exports = {
     }
 
 };
+
+global.utils = module.exports;
