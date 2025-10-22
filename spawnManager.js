@@ -105,16 +105,19 @@ module.exports = {
 
     // 3. UPGRADERS / BUILDERS
     const targetUpgraders = room.controller.level >= 3 ? 3 : 2;
-    const targetBuilders = room.find(FIND_CONSTRUCTION_SITES).length > 5 ? 2 : 1;
 
     if (upgraders.length < targetUpgraders) {
       this.spawnCreep(spawn, 'upgrader', null, energyAvailable);
       return;
     }
-    if (builders.length < targetBuilders) {
-      this.spawnCreep(spawn, 'builder', null, energyAvailable);
-      return;
+
+    const desiredBuilders = getDesiredBuilderCount(room);
+    const currentBuilders = _.filter(Game.creeps, c => c.memory.role === 'builder' && c.room.name === room.name).length;
+
+    if (currentBuilders < desiredBuilders) {
+      spawnCreep('builder');
     }
+
 
     // If nothing else, maybe idle or additional logic
     // console.log('✅ All primary roles satisfied');
@@ -177,6 +180,25 @@ module.exports = {
 
     // nothing found
     return null;
+  },
+
+  getDesiredBuilderCount(room) {
+    const sites = room.find(FIND_CONSTRUCTION_SITES).length;
+    const containers = room.find(FIND_STRUCTURES, {
+      filter: s => s.structureType === STRUCTURE_CONTAINER
+    }).length;
+
+    // Base 1 builder
+    let count = 1;
+
+    // +1 for every 3 construction sites
+    count += Math.floor(sites / 3);
+
+    // Never exceed container count or 4 total
+    count = Math.min(count, containers, 4);
+
+    return count;
   }
+
 
 };
