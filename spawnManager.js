@@ -134,4 +134,58 @@ module.exports = {
       console.log(`⚠️ spawnCreep error: ${result} for ${role} ${name}`);
     }
   },
+
+  findIdlePosition(room) {
+    const spawn = room.find(FIND_MY_SPAWNS)[0];
+    if (!spawn) return null;
+
+    // If already cached in memory, reuse it
+    if (Memory.rooms[room.name]?.idlePos) {
+      const { x, y, roomName } = Memory.rooms[room.name].idlePos;
+      return new RoomPosition(x, y, roomName);
+    }
+
+    const terrain = room.getTerrain();
+
+    // Search in expanding radius from spawn
+    for (let radius = 2; radius <= 6; radius++) {
+      const positions = [];
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          const x = spawn.pos.x + dx;
+          const y = spawn.pos.y + dy;
+          if (x < 0 || y < 0 || x > 49 || y > 49) continue;
+
+          // Check terrain
+          if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+
+          const pos = new RoomPosition(x, y, room.name);
+
+          // Skip if near spawn or sources
+          if (pos.inRangeTo(spawn, 2)) continue;
+          if (pos.findInRange(FIND_SOURCES, 2).length > 0) continue;
+
+          // Skip if there’s a structure there
+          const structures = pos.lookFor(LOOK_STRUCTURES);
+          if (structures.length > 0) continue;
+
+          positions.push(pos);
+        }
+      }
+
+      if (positions.length > 0) {
+        const idlePos = positions[0]; // could randomize if you like
+        Memory.rooms[room.name] = Memory.rooms[room.name] || {};
+        Memory.rooms[room.name].idlePos = {
+          x: idlePos.x,
+          y: idlePos.y,
+          roomName: idlePos.roomName
+        };
+        return idlePos;
+      }
+    }
+
+    console.log(`⚠️ No safe idle position found in ${room.name}`);
+    return null;
+  }
 };
