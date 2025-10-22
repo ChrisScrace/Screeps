@@ -2,11 +2,7 @@ const sourceManager = require('sourceManager');
 
 module.exports = {
     run(creep) {
-        const roomName = creep.room.name;
-
-        // -----------------------
-        // Assign source if needed
-        // -----------------------
+        // === ASSIGN SOURCE ===
         if (!creep.memory.sourceId) {
             const source = creep.pos.findClosestByPath(FIND_SOURCES);
             if (!source) return;
@@ -16,50 +12,43 @@ module.exports = {
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) return;
 
-        // -----------------------
-        // Assign a valid harvesting tile
-        // -----------------------
+        // === ASSIGN TILE FROM SOURCE MANAGER ===
         if (!creep.memory.tile) {
-            const tile = sourceManager.assignTile(source.id, creep.name, roomName);
-            if (!tile) return; // No free tile yet
+            const tile = sourceManager.assignTile(source.id, creep.name, creep.room.name);
+            if (!tile) return; // no free tile available
             creep.memory.tile = tile;
         }
 
-        const targetPos = new RoomPosition(creep.memory.tile.x, creep.memory.tile.y, roomName);
+        const targetPos = new RoomPosition(creep.memory.tile.x, creep.memory.tile.y, creep.room.name);
 
-        // Move to assigned tile
+        // === MOVE TO ASSIGNED TILE ===
         if (!creep.pos.isEqualTo(targetPos)) {
             creep.moveTo(targetPos, { visualizePathStyle: { stroke: '#ffaa00' } });
             return;
         }
 
-        // -----------------------
-        // Harvest logic
-        // -----------------------
+        // === HARVEST ===
         if (creep.store.getFreeCapacity() > 0) {
             creep.harvest(source);
         }
 
-        // -----------------------
-        // Deposit logic
-        // -----------------------
+        // === DEPOSIT ENERGY ===
         if (creep.store[RESOURCE_ENERGY] > 0) {
-            // Look for container adjacent to the assigned tile
+            // Find the closest container within 1 tile of the source
             const container = source.pos.findInRange(FIND_STRUCTURES, 1, {
                 filter: s => s.structureType === STRUCTURE_CONTAINER
             })[0];
 
-            // 1️⃣ If container exists and has space, deposit
-            if (container && container.store.getFreeCapacity(RESOURCE_ENERGY) > 0) {
-                const transferResult = creep.transfer(container, RESOURCE_ENERGY);
-                if (transferResult === ERR_NOT_IN_RANGE) {
+            if (container) {
+                // ✅ If in range (1 tile away), transfer directly
+                if (creep.pos.inRangeTo(container, 1)) {
+                    creep.transfer(container, RESOURCE_ENERGY);
+                } else {
+                    // Move closer if not yet in range
                     creep.moveTo(container, { visualizePathStyle: { stroke: '#ffaa00' } });
                 }
-                return;
-            }
-
-            // 2️⃣ Otherwise, drop energy on ground (for haulers to collect)
-            if (!container || container.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+            } else {
+                // ❌ No container nearby — drop energy on ground
                 creep.drop(RESOURCE_ENERGY);
             }
         }
