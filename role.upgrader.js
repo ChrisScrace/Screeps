@@ -1,4 +1,3 @@
-// role.upgrader.js
 const energyManager = require('energyManager');
 
 module.exports = {

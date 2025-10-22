@@ -1,4 +1,3 @@
-// energyManager.js
 module.exports = {
     /**
      * Try to refill a creep with energy from containers, haulers, spawn, drops, or sources.
@@ -10,7 +9,7 @@ module.exports = {
         // -----------------------
         const container = creep.pos.findClosestByPath(FIND_STRUCTURES, {
             filter: s => s.structureType === STRUCTURE_CONTAINER &&
-                         s.store[RESOURCE_ENERGY] > 0
+                s.store[RESOURCE_ENERGY] > 0
         });
         if (container) {
             if (creep.withdraw(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
@@ -19,32 +18,21 @@ module.exports = {
             return true;
         }
 
-        // -----------------------
-        // 2. Haulers carrying energy
-        // -----------------------
-        const hauler = creep.pos.findClosestByPath(FIND_MY_CREEPS, {
-            filter: c => c.memory.role === 'hauler' && c.store[RESOURCE_ENERGY] > 0
-        });
-        if (hauler) {
-            if (creep.withdraw(hauler, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-                creep.moveTo(hauler, { visualizePathStyle: { stroke: '#ffaa00' } });
-            }
-            return true;
-        }
+        // // -----------------------
+        // // 2. Haulers carrying energy
+        // // -----------------------
+        // const hauler = creep.pos.findClosestByPath(FIND_MY_CREEPS, {
+        //     filter: c => c.memory.role === 'hauler' && c.store[RESOURCE_ENERGY] > 0
+        // });
+        // if (hauler) {
+        //     if (creep.withdraw(hauler, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+        //         creep.moveTo(hauler, { visualizePathStyle: { stroke: '#ffaa00' } });
+        //     }
+        //     return true;
+        // }
 
         // -----------------------
-        // 3. Spawn (fallback)
-        // -----------------------
-        const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS)[0];
-        if (spawn && spawn.energy > 0) { // ✅ use spawn.energy instead of spawn.store
-            if (spawn.transferEnergy(creep) === ERR_NOT_IN_RANGE) {
-                creep.moveTo(spawn, { visualizePathStyle: { stroke: '#ffaa00' } });
-            }
-            return true;
-        }
-
-        // -----------------------
-        // 4. Dropped energy
+        // 3. Dropped energy
         // -----------------------
         const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
             filter: r => r.resourceType === RESOURCE_ENERGY
@@ -55,6 +43,19 @@ module.exports = {
             }
             return true;
         }
+
+        // -----------------------
+        // 4. Spawn (fallback)
+        // -----------------------
+        const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS)[0];
+        if (spawn && spawn.energy > 0) { // ✅ use spawn.energy instead of spawn.store
+            if (spawn.transferEnergy(creep) === ERR_NOT_IN_RANGE) {
+                creep.moveTo(spawn, { visualizePathStyle: { stroke: '#ffaa00' } });
+            }
+            return true;
+        }
+
+
 
         // -----------------------
         // 5. Fallback: harvest directly

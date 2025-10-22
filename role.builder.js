@@ -1,4 +1,3 @@
-// role.builder.js
 const energyManager = require('energyManager');
 
 module.exports = {
