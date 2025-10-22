@@ -3,7 +3,7 @@ module.exports = {
      * Initializes or refreshes the source data for a room.
      * Safe to call every tick.
      */
-    initRoom: function(room) {
+    initRoom: function (room) {
         if (!Memory.rooms) Memory.rooms = {};
         if (!Memory.rooms[room.name]) Memory.rooms[room.name] = {};
         if (!Memory.rooms[room.name].sources) Memory.rooms[room.name].sources = {};
@@ -50,18 +50,33 @@ module.exports = {
     /**
      * Returns all valid walkable tiles for a source.
      */
-    getTilesForSource: function(source) {
+    getTilesForSource: function (source) {
+        if (!source || !source.room) {
+            console.log(`[sourceManager] ⚠️ getTilesForSource called with invalid source`);
+            return [];
+        }
+
         const roomName = source.room.name;
-        if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources) return [];
+
+        if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources) {
+            console.log(`[sourceManager] ⚠️ No memory for room ${roomName}`);
+            return [];
+        }
+
         const data = Memory.rooms[roomName].sources[source.id];
-        return data && data.tiles ? data.tiles : [];
+        if (!data || !data.tiles) {
+            console.log(`[sourceManager] ⚠️ No data for source ${source.id} in ${roomName}`);
+            return [];
+        }
+
+        return data.tiles;
     },
 
     /**
      * Assigns a free tile near a source to a creep.
      * Returns tile coordinates or null if none available.
      */
-    assignTile: function(sourceId, creepName, roomName) {
+    assignTile: function (sourceId, creepName, roomName) {
         if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources[sourceId]) {
             return null;
         }
@@ -90,7 +105,7 @@ module.exports = {
     /**
      * Releases a reserved tile when a creep dies.
      */
-    releaseTile: function(sourceId, creepName, roomName, tile) {
+    releaseTile: function (sourceId, creepName, roomName, tile) {
         if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources[sourceId]) return;
 
         const key = tile.x + ',' + tile.y;
@@ -104,7 +119,7 @@ module.exports = {
     /**
      * Clean up invalid assignments or dead creeps from memory.
      */
-    cleanupRoom: function(roomName) {
+    cleanupRoom: function (roomName) {
         if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources) return;
 
         const roomData = Memory.rooms[roomName];
