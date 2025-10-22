@@ -1,204 +1,117 @@
 const sourceManager = require('sourceManager');
 
-const roleBodies = {
-  harvester: (energy) => {
-    const body = [];
-    let cost = 0;
-    while (cost + 200 <= energy && body.length < 9) {
-      body.push(WORK, CARRY, MOVE);
-      cost += 200;
-    }
-    return body.length ? body : [WORK, CARRY, MOVE];
-  },
-  hauler: (energy) => {
-    const body = [];
-    let cost = 0;
-    while (cost + 150 <= energy && body.length < 15) {
-      body.push(CARRY, CARRY, MOVE);
-      cost += 150;
-    }
-    return body.length ? body : [CARRY, MOVE];
-  },
-  upgrader: (energy) => {
-    const body = [];
-    let cost = 0;
-    while (cost + 200 <= energy && body.length < 15) {
-      body.push(WORK, CARRY, MOVE);
-      cost += 200;
-    }
-    return body.length ? body : [WORK, CARRY, MOVE];
-  },
-  builder: (energy) => {
-    const body = [];
-    let cost = 0;
-    while (cost + 200 <= energy && body.length < 15) {
-      body.push(WORK, CARRY, MOVE);
-      cost += 200;
-    }
-    return body.length ? body : [WORK, CARRY, MOVE];
-  }
-};
-
 module.exports = {
-  run() {
-    const spawn = Game.spawns['Spawn1'];  // ← adjust if spawn has different name
-    if (!spawn) {
-      console.log('⚠️ Spawn not found');
-      return;
-    }
-    if (spawn.spawning) {
-      // Optionally show the role being spawned
-      const spawningCreep = Game.creeps[spawn.spawning.name];
-      if (spawningCreep) {
-        spawn.room.visual.text(
-          '🛠️ ' + spawningCreep.memory.role,
-          spawn.pos.x + 1,
-          spawn.pos.y,
-          { align: 'left', opacity: 0.8 }
+    run(room) {
+        if (!room || !room.controller || !room.controller.my) return;
+
+        // Initialize source memory
+        sourceManager.initRoom(room);
+
+        const spawns = room.find(FIND_MY_SPAWNS);
+        if (spawns.length === 0) return;
+
+        const spawn = spawns[0];
+        if (spawn.spawning) return;
+
+        // Energy and creep role counts
+        const energy = room.energyAvailable;
+        const creeps = _.groupBy(
+            _.filter(Game.creeps, c => c.room.name === room.name),
+            c => c.memory.role
         );
-      }
-      return;
-    }
 
-    const room = spawn.room;
-    const energyAvailable = room.energyAvailable;
+        const counts = {
+            harvester: creeps.harvester?.length || 0,
+            hauler: creeps.hauler?.length || 0,
+            builder: creeps.builder?.length || 0,
+            upgrader: creeps.upgrader?.length || 0
+        };
 
-    // Ensure source data is initialized
-    sourceManager.initRoom(room);
-    const sources = Memory.rooms[room.name].sources;
-    if (!sources) {
-      console.log('⚠️ No source data for room', room.name);
-      return;
-    }
+        // Desired counts
+        const desired = this.getDesiredCounts(room);
 
-    const creepsByRole = _.groupBy(Game.creeps, c => c.memory.role);
-    const harvesters = creepsByRole['harvester'] || [];
-    const haulers = creepsByRole['hauler'] || [];
-    const upgraders = creepsByRole['upgrader'] || [];
-    const builders = creepsByRole['builder'] || [];
-
-    // 1. HARVESTERS: fill all free source-tiles
-    let sourceToSpawn = null;
-    let maxFree = -1;
-    for (const sId in sources) {
-      const tileCount = (sources[sId].tiles || []).length;
-      const assignedCount = harvesters.filter(h => h.memory.sourceId === sId).length;
-      const freeTiles = tileCount - assignedCount;
-      // Debug log
-      // console.log(`Source ${sId}: tileCount=${tileCount}, assigned=${assignedCount}, free=${freeTiles}`);
-      if (freeTiles > maxFree) {
-        maxFree = freeTiles;
-        sourceToSpawn = sId;
-      }
-    }
-    if (sourceToSpawn && maxFree > 0) {
-      this.spawnCreep(spawn, 'harvester', sourceToSpawn, energyAvailable);
-      return;
-    }
-
-    // 2. HAULERS: only after harvesters exist. Spawn if dropped energy > existing haulers
-    const freeEnergy = room.find(FIND_DROPPED_RESOURCES, { filter: r => r.resourceType === RESOURCE_ENERGY });
-    if (harvesters.length > 0 && freeEnergy.length > haulers.length) {
-      this.spawnCreep(spawn, 'hauler', null, energyAvailable);
-      return;
-    }
-
-    // 3. UPGRADERS / BUILDERS
-    const targetUpgraders = room.controller.level >= 3 ? 3 : 2;
-
-    if (upgraders.length < targetUpgraders) {
-      this.spawnCreep(spawn, 'upgrader', null, energyAvailable);
-      return;
-    }
-
-    const desiredBuilders = getDesiredBuilderCount(room);
-    const currentBuilders = _.filter(Game.creeps, c => c.memory.role === 'builder' && c.room.name === room.name).length;
-
-    if (currentBuilders < desiredBuilders) {
-      spawnCreep('builder');
-    }
-
-
-    // If nothing else, maybe idle or additional logic
-    // console.log('✅ All primary roles satisfied');
-  },
-
-  spawnCreep(spawn, role, sourceId = null, energy) {
-    const body = roleBodies[role](energy);
-    const name = `${role}_${Game.time}`;
-    const memory = { role: role };
-    if (sourceId) {
-      memory.sourceId = sourceId;
-    }
-    const result = spawn.spawnCreep(body, name, { memory: memory });
-    if (result === OK) {
-      console.log(`Spawning ${role} ${name} with body [${body.join(',')}]`);
-    } else {
-      console.log(`⚠️ spawnCreep error: ${result} for ${role} ${name}`);
-    }
-  },
-
-  findIdlePosition(room) {
-    const spawns = room.find(FIND_MY_SPAWNS);
-    if (!spawns || spawns.length === 0) return null;
-    const spawn = spawns[0];
-
-    // reuse cached value if present
-    if (Memory.rooms && Memory.rooms[room.name] && Memory.rooms[room.name].idlePos) {
-      const p = Memory.rooms[room.name].idlePos;
-      return new RoomPosition(p.x, p.y, p.roomName);
-    }
-
-    const terrain = room.getTerrain();
-
-    // search for a safe tile
-    for (let radius = 2; radius <= 6; radius++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        for (let dy = -radius; dy <= radius; dy++) {
-          const x = spawn.pos.x + dx;
-          const y = spawn.pos.y + dy;
-          if (x < 0 || y < 0 || x > 49 || y > 49) continue;
-          if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
-
-          const pos = new RoomPosition(x, y, room.name);
-
-          // skip tiles near spawn or sources
-          if (pos.inRangeTo(spawn, 2)) continue;
-          if (pos.findInRange(FIND_SOURCES, 2).length > 0) continue;
-
-          // skip tiles with structures
-          if (pos.lookFor(LOOK_STRUCTURES).length > 0) continue;
-
-          // found one — cache and return
-          Memory.rooms = Memory.rooms || {};
-          Memory.rooms[room.name] = Memory.rooms[room.name] || {};
-          Memory.rooms[room.name].idlePos = { x: pos.x, y: pos.y, roomName: pos.roomName };
-          return pos;
+        // Spawn priorities (harvesters first, then haulers, then utility)
+        if (counts.harvester < desired.harvester) {
+            this.spawnCreep(spawn, 'harvester');
+            return;
         }
-      }
+        if (counts.hauler < desired.hauler) {
+            this.spawnCreep(spawn, 'hauler');
+            return;
+        }
+        if (counts.builder < desired.builder) {
+            this.spawnCreep(spawn, 'builder');
+            return;
+        }
+        if (counts.upgrader < desired.upgrader) {
+            this.spawnCreep(spawn, 'upgrader');
+            return;
+        }
+    },
+
+    // ----------------------------
+    // Dynamic desired creep counts
+    // ----------------------------
+    getDesiredCounts(room) {
+        const sites = room.find(FIND_CONSTRUCTION_SITES).length;
+        const containers = room.find(FIND_STRUCTURES, {
+            filter: s => s.structureType === STRUCTURE_CONTAINER
+        }).length;
+
+        const energyCap = room.energyCapacityAvailable;
+
+        // Base ratios
+        let harvester = 2;
+        let hauler = energyCap < 600 ? 1 : 2;
+        let upgrader = energyCap < 800 ? 1 : 2;
+
+        // Dynamic builder scaling
+        let builder = 1;
+        builder += Math.floor(sites / 3);
+        builder = Math.min(builder, containers || 2, 4);
+
+        // Early room fallback
+        if (energyCap < 400) {
+            harvester = 2;
+            hauler = 0;
+            builder = 1;
+            upgrader = 1;
+        }
+
+        return { harvester, hauler, builder, upgrader };
+    },
+
+    // ----------------------------
+    // Spawn logic
+    // ----------------------------
+    spawnCreep(spawn, role) {
+        const body = this.getBody(role, spawn.room.energyAvailable);
+        const name = `${role}_${Game.time}`;
+        const result = spawn.spawnCreep(body, name, { memory: { role } });
+
+        if (result === OK) {
+            console.log(`🚀 Spawning new ${role}: ${name}`);
+        } else if (result !== ERR_BUSY && result !== ERR_NOT_ENOUGH_ENERGY) {
+            console.log(`⚠️ Failed to spawn ${role}: ${result}`);
+        }
+    },
+
+    // ----------------------------
+    // Role-specific body designs
+    // ----------------------------
+    getBody(role, energy) {
+        if (role === 'harvester') {
+            return energy >= 550 ? [WORK, WORK, WORK, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
+        }
+        if (role === 'hauler') {
+            return energy >= 550 ? [CARRY, CARRY, CARRY, CARRY, MOVE, MOVE] : [CARRY, CARRY, MOVE];
+        }
+        if (role === 'builder') {
+            return energy >= 550 ? [WORK, WORK, CARRY, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
+        }
+        if (role === 'upgrader') {
+            return energy >= 550 ? [WORK, WORK, CARRY, CARRY, MOVE, MOVE] : [WORK, CARRY, MOVE];
+        }
+        return [WORK, CARRY, MOVE];
     }
-
-    // nothing found
-    return null;
-  },
-
-  getDesiredBuilderCount(room) {
-    const sites = room.find(FIND_CONSTRUCTION_SITES).length;
-    const containers = room.find(FIND_STRUCTURES, {
-      filter: s => s.structureType === STRUCTURE_CONTAINER
-    }).length;
-
-    // Base 1 builder
-    let count = 1;
-
-    // +1 for every 3 construction sites
-    count += Math.floor(sites / 3);
-
-    // Never exceed container count or 4 total
-    count = Math.min(count, containers, 4);
-
-    return count;
-  }
-
-
 };

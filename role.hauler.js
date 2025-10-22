@@ -1,4 +1,4 @@
-const spawnManager = require('spawnManager');
+const utils = require('utils');
 
 module.exports = {
     run(creep) {
@@ -85,7 +85,7 @@ module.exports = {
         // ==============================
         // 4️⃣ Idle position (safe parking)
         // ==============================
-        const idlePos = spawnManager.findIdlePosition(creep.room);
+        const idlePos = utils.findIdlePosition(creep.room);
         if (idlePos && !creep.pos.isEqualTo(idlePos)) {
             creep.moveTo(idlePos, { visualizePathStyle: { stroke: '#5555ff' } });
         }
