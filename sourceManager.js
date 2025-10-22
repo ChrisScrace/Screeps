@@ -9,8 +9,7 @@ module.exports = {
         if (!Memory.rooms[room.name].sources) Memory.rooms[room.name].sources = {};
 
         const sources = room.find(FIND_SOURCES);
-        for (let i = 0; i < sources.length; i++) {
-            const source = sources[i];
+        for (let source of sources) {
             if (!Memory.rooms[room.name].sources[source.id]) {
                 Memory.rooms[room.name].sources[source.id] = {
                     id: source.id,
@@ -30,8 +29,9 @@ module.exports = {
                     for (let dy = -1; dy <= 1; dy++) {
                         const x = source.pos.x + dx;
                         const y = source.pos.y + dy;
-                        if (room.lookForAt(LOOK_TERRAIN, x, y)[0] !== 'wall') {
-                            tiles.push({ x: x, y: y });
+                        const terrain = room.lookForAt(LOOK_TERRAIN, x, y)[0];
+                        if (terrain !== 'wall') {
+                            tiles.push({ x, y });
                         }
                     }
                 }
@@ -41,10 +41,20 @@ module.exports = {
 
         // Cleanup: remove sources that no longer exist
         for (let storedId in Memory.rooms[room.name].sources) {
-            if (!sources.find(function(s) { return s.id === storedId; })) {
+            if (!sources.find(s => s.id === storedId)) {
                 delete Memory.rooms[room.name].sources[storedId];
             }
         }
+    },
+
+    /**
+     * Returns all valid walkable tiles for a source.
+     */
+    getTilesForSource: function(source) {
+        const roomName = source.room.name;
+        if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources) return [];
+        const data = Memory.rooms[roomName].sources[source.id];
+        return data && data.tiles ? data.tiles : [];
     },
 
     /**
@@ -56,13 +66,12 @@ module.exports = {
             return null;
         }
 
-        var sourceData = Memory.rooms[roomName].sources[sourceId];
+        const sourceData = Memory.rooms[roomName].sources[sourceId];
 
-        for (var i = 0; i < sourceData.tiles.length; i++) {
-            var tile = sourceData.tiles[i];
-            var key = tile.x + ',' + tile.y;
-            var occupant = sourceData.assigned[key];
-            var creep = Game.creeps[occupant];
+        for (let tile of sourceData.tiles) {
+            const key = tile.x + ',' + tile.y;
+            const occupant = sourceData.assigned[key];
+            const creep = Game.creeps[occupant];
 
             // Reclaim tile if assigned creep is dead
             if (occupant && !creep) {
@@ -84,8 +93,8 @@ module.exports = {
     releaseTile: function(sourceId, creepName, roomName, tile) {
         if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources[sourceId]) return;
 
-        var key = tile.x + ',' + tile.y;
-        var sourceData = Memory.rooms[roomName].sources[sourceId];
+        const key = tile.x + ',' + tile.y;
+        const sourceData = Memory.rooms[roomName].sources[sourceId];
 
         if (sourceData.assigned[key] === creepName) {
             delete sourceData.assigned[key];
@@ -98,11 +107,11 @@ module.exports = {
     cleanupRoom: function(roomName) {
         if (!Memory.rooms || !Memory.rooms[roomName] || !Memory.rooms[roomName].sources) return;
 
-        var roomData = Memory.rooms[roomName];
-        for (var sId in roomData.sources) {
-            var sourceData = roomData.sources[sId];
-            for (var key in sourceData.assigned) {
-                var creepName = sourceData.assigned[key];
+        const roomData = Memory.rooms[roomName];
+        for (let sId in roomData.sources) {
+            const sourceData = roomData.sources[sId];
+            for (let key in sourceData.assigned) {
+                const creepName = sourceData.assigned[key];
                 if (!Game.creeps[creepName]) {
                     delete sourceData.assigned[key];
                 }
