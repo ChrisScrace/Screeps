@@ -136,56 +136,47 @@ module.exports = {
   },
 
   findIdlePosition(room) {
-    const spawn = room.find(FIND_MY_SPAWNS)[0];
-    if (!spawn) return null;
+    const spawns = room.find(FIND_MY_SPAWNS);
+    if (!spawns || spawns.length === 0) return null;
+    const spawn = spawns[0];
 
-    // If already cached in memory, reuse it
-    if (Memory.rooms[room.name]?.idlePos) {
-      const { x, y, roomName } = Memory.rooms[room.name].idlePos;
-      return new RoomPosition(x, y, roomName);
+    // reuse cached value if present
+    if (Memory.rooms && Memory.rooms[room.name] && Memory.rooms[room.name].idlePos) {
+      const p = Memory.rooms[room.name].idlePos;
+      return new RoomPosition(p.x, p.y, p.roomName);
     }
 
     const terrain = room.getTerrain();
 
-    // Search in expanding radius from spawn
+    // search for a safe tile
     for (let radius = 2; radius <= 6; radius++) {
-      const positions = [];
       for (let dx = -radius; dx <= radius; dx++) {
         for (let dy = -radius; dy <= radius; dy++) {
           const x = spawn.pos.x + dx;
           const y = spawn.pos.y + dy;
           if (x < 0 || y < 0 || x > 49 || y > 49) continue;
-
-          // Check terrain
           if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
 
           const pos = new RoomPosition(x, y, room.name);
 
-          // Skip if near spawn or sources
+          // skip tiles near spawn or sources
           if (pos.inRangeTo(spawn, 2)) continue;
           if (pos.findInRange(FIND_SOURCES, 2).length > 0) continue;
 
-          // Skip if there’s a structure there
-          const structures = pos.lookFor(LOOK_STRUCTURES);
-          if (structures.length > 0) continue;
+          // skip tiles with structures
+          if (pos.lookFor(LOOK_STRUCTURES).length > 0) continue;
 
-          positions.push(pos);
+          // found one — cache and return
+          Memory.rooms = Memory.rooms || {};
+          Memory.rooms[room.name] = Memory.rooms[room.name] || {};
+          Memory.rooms[room.name].idlePos = { x: pos.x, y: pos.y, roomName: pos.roomName };
+          return pos;
         }
-      }
-
-      if (positions.length > 0) {
-        const idlePos = positions[0]; // could randomize if you like
-        Memory.rooms[room.name] = Memory.rooms[room.name] || {};
-        Memory.rooms[room.name].idlePos = {
-          x: idlePos.x,
-          y: idlePos.y,
-          roomName: idlePos.roomName
-        };
-        return idlePos;
       }
     }
 
-    console.log(`⚠️ No safe idle position found in ${room.name}`);
+    // nothing found
     return null;
   }
+
 };
