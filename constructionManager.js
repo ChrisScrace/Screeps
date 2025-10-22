@@ -7,42 +7,53 @@ module.exports = {
         // === BUILD SOURCE CONTAINERS FIRST ===
         this.buildSourceContainers(room);
 
+        // Count all current construction sites
+        const currentSites = room.find(FIND_CONSTRUCTION_SITES).length;
+
         // Limit construction sites to prevent spam
         const maxSites = room.controller.level <= 2 ? 10 :
                          room.controller.level <= 5 ? 25 : 50;
-        if (room.find(FIND_CONSTRUCTION_SITES).length > maxSites) return;
+        if (currentSites >= maxSites) return;
 
         const spawns = room.find(FIND_MY_SPAWNS);
         if (!spawns.length) return;
         const spawn = spawns[0];
 
         // === AUTO-BUILD EXTENSIONS ===
-        const extensions = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_EXTENSION });
-        const extensionLimits = { 1: 0, 2: 5, 3: 10, 4: 20, 5: 30, 6: 40, 7: 50, 8: 60 };
-        const maxExtensions = extensionLimits[room.controller.level] || 0;
-
-        if (extensions.length < maxExtensions) {
-            this.buildExtensionGrid(spawn.pos, room, maxExtensions - extensions.length);
-        }
+        this.buildExtensions(spawn, room);
 
         // === AUTO-BUILD TOWERS ===
-        if (room.controller.level >= 3) {
-            const towers = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_TOWER });
-            const maxTowers = 1; // expand logic if you want more towers later
-            if (towers.length < maxTowers) {
-                this.buildTowerGrid(spawn.pos, room, maxTowers - towers.length);
-            }
-        }
+        this.buildTowers(spawn, room);
 
         // === ROADS ===
-        if (Game.time % 100 === 0) {
+        // Only plan roads if there are no other construction sites
+        if (currentSites === 0 && Game.time % 100 === 0) {
             planRoads(room);
         }
     },
 
-    /**
-     * Build extensions in a compact grid around a spawn
-     */
+    buildExtensions(spawn, room) {
+        const extensions = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_EXTENSION });
+        const extensionLimits = { 1: 0, 2: 5, 3: 10, 4: 20, 5: 30, 6: 40, 7: 50, 8: 60 };
+        const maxExtensions = extensionLimits[room.controller.level] || 0;
+
+        const toBuild = maxExtensions - extensions.length;
+        if (toBuild <= 0) return;
+
+        this.buildExtensionGrid(spawn.pos, room, toBuild);
+    },
+
+    buildTowers(spawn, room) {
+        if (room.controller.level < 3) return;
+
+        const towers = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_TOWER });
+        const maxTowers = 1;
+        const toBuild = maxTowers - towers.length;
+        if (toBuild <= 0) return;
+
+        this.buildTowerGrid(spawn.pos, room, toBuild);
+    },
+
     buildExtensionGrid(center, room, count) {
         let placed = 0;
         for (let radius = 2; radius <= 5 && placed < count; radius++) {
@@ -58,9 +69,6 @@ module.exports = {
         }
     },
 
-    /**
-     * Build towers in fixed pattern around spawn
-     */
     buildTowerGrid(center, room, count) {
         const offsets = [
             { x: -2, y: -2 },
@@ -78,29 +86,15 @@ module.exports = {
         }
     },
 
-    /**
-     * Check if a position is valid for construction
-     */
-    isValidConstructionSite(x, y, room) {
-        if (x < 1 || x > 48 || y < 1 || y > 48) return false;
-        const terrain = room.getTerrain().get(x, y);
-        if (terrain === TERRAIN_MASK_WALL) return false;
-        const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
-        const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
-        return !hasStructure && !hasSite;
-    },
-
-    /**
-     * Build containers next to sources, prioritizing walkable tiles
-     */
     buildSourceContainers(room) {
         const sources = room.find(FIND_SOURCES);
         for (const source of sources) {
-            // Skip if container already exists
+            // Skip if container already exists or is being built
             const existing = source.pos.findInRange(FIND_STRUCTURES, 1, { filter: s => s.structureType === STRUCTURE_CONTAINER });
-            if (existing.length > 0) continue;
+            const pending = source.pos.findInRange(FIND_CONSTRUCTION_SITES, 1, { filter: s => s.structureType === STRUCTURE_CONTAINER });
+            if (existing.length > 0 || pending.length > 0) continue;
 
-            // Pick first walkable tile around source
+            // Find first walkable tile
             const terrain = room.getTerrain();
             const offsets = [
                 { x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 },
@@ -114,5 +108,14 @@ module.exports = {
                 break;
             }
         }
+    },
+
+    isValidConstructionSite(x, y, room) {
+        if (x < 1 || x > 48 || y < 1 || y > 48) return false;
+        const terrain = room.getTerrain().get(x, y);
+        if (terrain === TERRAIN_MASK_WALL) return false;
+        const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
+        const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
+        return !hasStructure && !hasSite;
     }
 };
