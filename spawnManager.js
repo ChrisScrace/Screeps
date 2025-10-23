@@ -81,14 +81,12 @@ module.exports = {
         // 2. HAULERS
         // --------------------
         const haulers = creepsByRole['hauler'] || [];
-        const freeEnergy = room.find(FIND_DROPPED_RESOURCES, { filter: r => r.resourceType === RESOURCE_ENERGY });
         const energyContainers = room.find(FIND_STRUCTURES, {
             filter: s => (s.structureType === STRUCTURE_CONTAINER || s.structureType === STRUCTURE_STORAGE) &&
                 s.store[RESOURCE_ENERGY] > 50
         });
 
-        const energySources = freeEnergy.length + energyContainers.length;
-        const targetHaulers = Math.min(3, Math.max(1, Math.ceil(energySources / 2)));
+        const targetHaulers = Math.min(3, Math.max(1, Math.ceil(energyContainers / 2)));
         if (energySources > haulers.length) {
             return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
         }
