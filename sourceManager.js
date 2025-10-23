@@ -6,7 +6,7 @@ module.exports = {
     /**
      * Initialize a room's sources in Memory
      */
-    initRoom: function(room) {
+    initRoom: function (room) {
         if (!Memory.rooms) Memory.rooms = {};
         if (!Memory.rooms[room.name]) Memory.rooms[room.name] = {};
         if (!Memory.rooms[room.name].sources) Memory.rooms[room.name].sources = {};
@@ -65,7 +65,7 @@ module.exports = {
      * Assigns a free tile next to a source for a creep
      * Returns {x, y} or null if no tile available
      */
-    assignTile: function(sourceId, creepName, roomName) {
+    assignTile: function (sourceId, creepName, roomName) {
         if (!Memory.rooms) return null;
         if (!Memory.rooms[roomName]) return null;
         if (!Memory.rooms[roomName].sources) return null;
@@ -95,24 +95,30 @@ module.exports = {
     /**
      * Release a tile when a creep dies
      */
-    releaseTile: function(sourceId, creepName, roomName, tile) {
+    releaseTile: function (sourceId, creepName, roomName, tile) {
         if (!Memory.rooms) return;
         if (!Memory.rooms[roomName]) return;
         if (!Memory.rooms[roomName].sources) return;
         if (!Memory.rooms[roomName].sources[sourceId]) return;
+        if (!tile || typeof tile.x === 'undefined' || typeof tile.y === 'undefined') {
+            console.log('⚠️ releaseTile: invalid or missing tile for', creepName);
+            return;
+        }
 
         const key = tile.x + ',' + tile.y;
         const sourceData = Memory.rooms[roomName].sources[sourceId];
 
         if (sourceData.assigned[key] === creepName) {
             delete sourceData.assigned[key];
+            console.log('✅ Released tile', key, 'for', creepName);
         }
     },
+
 
     /**
      * Get all tiles for a source
      */
-    getTiles: function(sourceId, roomName) {
+    getTiles: function (sourceId, roomName) {
         if (!Memory.rooms) return [];
         if (!Memory.rooms[roomName]) return [];
         if (!Memory.rooms[roomName].sources) return [];
@@ -124,7 +130,7 @@ module.exports = {
     /**
      * Cleanup invalid creep assignments
      */
-    cleanupRoom: function(roomName) {
+    cleanupRoom: function (roomName) {
         if (!Memory.rooms) return;
         if (!Memory.rooms[roomName]) return;
         if (!Memory.rooms[roomName].sources) return;
