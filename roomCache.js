@@ -45,6 +45,6 @@ module.exports = {
     getUpgradeTargets(room) { this.init(room); return room._cache.upgradeTargets; },
     getHostiles(room) { this.init(room); return room._cache.hostiles; },
     getMyCreeps(room) { this.init(room); return room._cache.myCreeps; },
-    getStructures(room, structureTypes) { this.init(room); return room._cache.structures; },
+    getStructures(room) { this.init(room); return room._cache.structures; },
 
 };
