@@ -43,43 +43,46 @@ module.exports = {
     // PRIORITY 1: SOURCE CONTAINERS
     // -----------------------------
     buildSourceContainers(room) {
-        let built = false;
-        const sources = room.find(FIND_SOURCES);
+    let built = false;
+    const sources = room.find(FIND_SOURCES);
 
-        for (const source of sources) {
-            const tiles = sourceManager.getTilesForSource(source.id, room.name);
-            if (!tiles || tiles.length === 0) continue;
+    for (const source of sources) {
+        const tiles = sourceManager.getTilesForSource(source.id, room.name);
+        if (!tiles || tiles.length === 0) continue;
 
-            for (const tile of tiles) {
-                const { x, y } = tile;
+        for (const tile of tiles) {
+            const { x, y } = tile;
 
-                const terrain = room.getTerrain().get(x, y);
-                if (terrain === TERRAIN_MASK_WALL) continue;
+            const terrain = room.getTerrain().get(x, y);
+            if (terrain === TERRAIN_MASK_WALL) continue;
 
-                // Remove blocking sites that aren't containers
-                const blockingSites = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y);
-                for (const site of blockingSites) {
-                    if (site.structureType !== STRUCTURE_CONTAINER && site.progress === 0) site.remove();
-                }
-
-                // Skip if container already exists or planned
-                const hasContainer = room.lookForAt(LOOK_STRUCTURES, x, y)
-                    .some(s => s.structureType === STRUCTURE_CONTAINER);
-                const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y)
-                    .some(s => s.structureType === STRUCTURE_CONTAINER);
-                if (hasContainer || hasSite) continue;
-
-                if (room.createConstructionSite(x, y, STRUCTURE_CONTAINER) === OK) {
-                    this.cancelLowerPrioritySites(room, PRIORITY.CONTAINER);
-                    built = true;
-                    break;
+            // Remove only blocking sites that are not containers or roads
+            const blockingSites = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y);
+            for (const site of blockingSites) {
+                const priority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
+                if (site.structureType !== STRUCTURE_CONTAINER && site.progress === 0 && priority !== PRIORITY.ROAD) {
+                    site.remove();
                 }
             }
-            if (built) break; // Only build one container per tick
-        }
 
-        return built;
-    },
+            // Skip if container already exists or planned
+            const hasContainer = room.lookForAt(LOOK_STRUCTURES, x, y)
+                .some(s => s.structureType === STRUCTURE_CONTAINER);
+            const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y)
+                .some(s => s.structureType === STRUCTURE_CONTAINER);
+            if (hasContainer || hasSite) continue;
+
+            if (room.createConstructionSite(x, y, STRUCTURE_CONTAINER) === OK) {
+                this.cancelLowerPrioritySites(room, PRIORITY.CONTAINER);
+                built = true;
+                break;
+            }
+        }
+        if (built) break; // Only build one container per tick
+    }
+
+    return built;
+},
 
     // -----------------------------
     // PRIORITY 2: EXTENSIONS
