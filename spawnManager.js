@@ -87,7 +87,7 @@ module.exports = {
         });
 
         const targetHaulers = Math.min(3, Math.max(1, Math.ceil(energyContainers / 2)));
-        if (energySources > haulers.length) {
+        if (targetHaulers > haulers.length) {
             return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
         }
 
