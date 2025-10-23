@@ -5,16 +5,13 @@ const PRIORITY = {
     CONTAINER: 1,
     EXTENSION: 2,
     TOWER: 3,
-    DEFENSE: 4,
-    ROAD: 5
+    ROAD: 4
 };
 
 const STRUCTURE_PRIORITY = {
     [STRUCTURE_CONTAINER]: PRIORITY.CONTAINER,
     [STRUCTURE_EXTENSION]: PRIORITY.EXTENSION,
     [STRUCTURE_TOWER]: PRIORITY.TOWER,
-    [STRUCTURE_WALL]: PRIORITY.DEFENSE,
-    [STRUCTURE_RAMPART]: PRIORITY.DEFENSE,
     [STRUCTURE_ROAD]: PRIORITY.ROAD
 };
 module.exports = {
@@ -160,87 +157,7 @@ module.exports = {
     },
 
     // -----------------------------
-    // PRIORITY 4: ENTRANCE DEFENSES
-    // -----------------------------
-    buildEntranceDefenses(room) {
-        const terrain = room.getTerrain();
-        let built = false;
-
-        // Step 1: Find all entrance tiles (walkable edges)
-        const entrances = [];
-        for (let x = 1; x < 49; x++) {
-            if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0 });
-            if (terrain.get(x, 49) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 49 });
-        }
-        for (let y = 1; y < 49; y++) {
-            if (terrain.get(0, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 0, y });
-            if (terrain.get(49, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 49, y });
-        }
-
-        if (!entrances.length) return false;
-
-        // Step 2: Group contiguous entrances
-        entrances.sort((a, b) => a.x - b.x || a.y - b.y);
-        let group = [];
-        const groups = [];
-        for (const e of entrances) {
-            if (!group.length) { group.push(e); continue; }
-            const last = group[group.length - 1];
-            const adjacent = (Math.abs(e.x - last.x) <= 1 && Math.abs(e.y - last.y) <= 1);
-            if (adjacent) group.push(e);
-            else { groups.push(group); group = [e]; }
-        }
-        if (group.length) groups.push(group);
-
-        // Step 3: Build a wall box around each entrance group
-        for (const g of groups) {
-            const minX = Math.max(Math.min(...g.map(p => p.x)) - 1, 1);
-            const maxX = Math.min(Math.max(...g.map(p => p.x)) + 1, 48);
-            const minY = Math.max(Math.min(...g.map(p => p.y)) - 1, 1);
-            const maxY = Math.min(Math.max(...g.map(p => p.y)) + 1, 48);
-
-            // Middle of entrance for rampart
-            const midIndex = Math.floor(g.length / 2);
-            const rampartPos = g[midIndex];
-
-            // Build walls on top/bottom
-            for (let x = minX; x <= maxX; x++) {
-                for (let y of [minY, maxY]) {
-                    if (!this.isBuildableTile(room, x, y)) continue;
-                    if (rampartPos.x === x && rampartPos.y === y) continue; // skip rampart
-                    if (room.createConstructionSite(x, y, STRUCTURE_WALL) === OK) {
-                        this.cancelLowerPrioritySites(room, PRIORITY.DEFENSE);
-                        built = true;
-                    }
-                }
-            }
-
-            // Build walls on left/right
-            for (let y = minY + 1; y < maxY; y++) {
-                for (let x of [minX, maxX]) {
-                    if (!this.isBuildableTile(room, x, y)) continue;
-                    if (rampartPos.x === x && rampartPos.y === y) continue; // skip rampart
-                    if (room.createConstructionSite(x, y, STRUCTURE_WALL) === OK) {
-                        this.cancelLowerPrioritySites(room, PRIORITY.DEFENSE);
-                        built = true;
-                    }
-                }
-            }
-
-            // Build rampart at middle of entrance
-            if (this.isBuildableTile(room, rampartPos.x, rampartPos.y)) {
-                if (room.createConstructionSite(rampartPos.x, rampartPos.y, STRUCTURE_RAMPART) === OK) {
-                    this.cancelLowerPrioritySites(room, PRIORITY.DEFENSE);
-                    built = true;
-                }
-            }
-        }
-
-        return built;
-    },
-
-    // -----------------------------
-    // PRIORITY 5: ROADS
+    // PRIORITY 4: ROADS
     // -----------------------------
     buildRoads(room) {
         if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
