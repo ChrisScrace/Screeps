@@ -14,20 +14,32 @@ module.exports = {
         // 2. Collect energy if not hauling
         // -------------------------
         if (!creep.memory.hauling) {
+            // Prioritize sources: dropped energy, tombstones, containers
             let target = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES) ||
-                         creep.pos.findClosestByPath(FIND_STRUCTURES, {
-                             filter: s => s.structureType === STRUCTURE_CONTAINER && s.store[RESOURCE_ENERGY] > 100
-                         });
+                creep.pos.findClosestByPath(FIND_TOMBSTONES, {
+                    filter: t => t.store[RESOURCE_ENERGY] > 0
+                }) ||
+                creep.pos.findClosestByPath(FIND_STRUCTURES, {
+                    filter: s => (s.structureType === STRUCTURE_CONTAINER || s.structureType === STRUCTURE_STORAGE) &&
+                        s.store[RESOURCE_ENERGY] > 100
+                });
 
             if (target) {
                 if (target.resourceType) {
-                    if (creep.pickup(target) === ERR_NOT_IN_RANGE) creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' } });
+                    // Dropped resource
+                    if (creep.pickup(target) === ERR_NOT_IN_RANGE) {
+                        creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' } });
+                    }
                 } else {
-                    if (creep.withdraw(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' } });
+                    // Tombstone or container
+                    if (creep.withdraw(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                        creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' } });
+                    }
                 }
             }
             return;
         }
+
 
         // -------------------------
         // 3. Deliver energy to spawn/extensions
