@@ -1,68 +1,49 @@
+const roomCache = require('roomCache');
 const sourceManager = require('sourceManager');
 
 module.exports = {
     run(creep) {
-        // -------------------------
-        // 1️⃣ If full, deliver
-        // -------------------------
+        // Full? Deliver
         if (creep.store.getFreeCapacity() === 0) {
-            this.deliverEnergy(creep);
+            // Try container nearby
+            const containers = roomCache.getContainers(creep.room);
+            const container = creep.pos.findClosestByRange(containers);
+            if (container) {
+                if (creep.transfer(container, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(container, { visualizePathStyle: { stroke: '#ffffff' }, reusePath: 5 });
+                }
+            } else {
+                creep.drop(RESOURCE_ENERGY);
+            }
             return;
         }
 
-        // -------------------------
-        // 2️⃣ Assign source if not assigned
-        // -------------------------
+        // Assign source if not set
         if (!creep.memory.sourceId) {
-            const source = creep.pos.findClosestByPath(FIND_SOURCES);
+            const sources = roomCache.getSources(creep.room);
+            const source = creep.pos.findClosestByPath(sources);
             if (source) creep.memory.sourceId = source.id;
         }
-
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) return;
 
-        // -------------------------
-        // 3️⃣ Assign harvest tile
-        // -------------------------
+        // Assign harvest tile
         if (!creep.memory.tile) {
             const tile = sourceManager.assignTile(source.id, creep.name, creep.room.name);
             if (tile) creep.memory.tile = tile;
         }
 
-        const tile = creep.memory.tile;
-        if (tile) {
-            const targetPos = new RoomPosition(tile.x, tile.y, creep.room.name);
-            if (!creep.pos.isEqualTo(targetPos)) {
-                creep.moveTo(targetPos, { visualizePathStyle: { stroke: '#ffaa00' }, reusePath: 5 });
+        // Move to tile
+        if (creep.memory.tile) {
+            const pos = new RoomPosition(creep.memory.tile.x, creep.memory.tile.y, creep.room.name);
+            if (!creep.pos.isEqualTo(pos)) {
+                creep.moveTo(pos, { visualizePathStyle: { stroke: '#ffaa00' }, reusePath: 5 });
                 return;
             }
         }
 
-        // -------------------------
-        // 4️⃣ Harvest from source
-        // -------------------------
+        // Harvest
         creep.harvest(source);
-    },
-
-    deliverEnergy(creep) {
-        // -------------------------
-        // 1️⃣ Try container first
-        // -------------------------
-        const nearbyContainer = creep.pos.findInRange(FIND_STRUCTURES, 1, {
-            filter: s =>
-                s.structureType === STRUCTURE_CONTAINER &&
-                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-        })[0];
-
-        if (nearbyContainer) {
-            const result = creep.transfer(nearbyContainer, RESOURCE_ENERGY);
-            if (result === OK || result === ERR_FULL) return;
-        }
-
-        // -------------------------
-        // 2️⃣ Drop on ground
-        // -------------------------
-        creep.drop(RESOURCE_ENERGY);
     },
 
     onDeath(creep) {
