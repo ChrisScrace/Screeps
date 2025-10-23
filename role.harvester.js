@@ -33,8 +33,7 @@ module.exports = {
 
         // 3️⃣ Harvest if not full
         creep.harvest(source);
-    }
-
+    },
 
     deliverEnergy(creep) {
         const haulersExist = _.some(Game.creeps, c => c.memory.role === 'hauler' && c.room.name === creep.room.name);
