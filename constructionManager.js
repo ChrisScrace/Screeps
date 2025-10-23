@@ -164,31 +164,29 @@ module.exports = {
     // -----------------------------
     buildEntranceDefenses(room) {
         const terrain = room.getTerrain();
-        const builtPerTickLimit = 5;
         let built = 0;
+        const builtPerTickLimit = 5;
 
-        // === Step 1: Find edge entrances ===
+        // === Step 1: Find room edge entrances ===
         const entrances = [];
-        for (let x = 0; x < 50; x++) {
+        for (let x = 1; x < 49; x++) {
             if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0, dir: 'N' });
             if (terrain.get(x, 49) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 49, dir: 'S' });
         }
-        for (let y = 0; y < 50; y++) {
+        for (let y = 1; y < 49; y++) {
             if (terrain.get(0, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 0, y, dir: 'W' });
             if (terrain.get(49, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 49, y, dir: 'E' });
         }
 
-        if (entrances.length === 0) return false;
+        if (!entrances.length) return false;
 
-        // === Step 2: Group contiguous entrance tiles ===
+        // === Step 2: Group contiguous tiles per direction ===
         const grouped = [];
         entrances.sort((a, b) => (a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)));
-
         let current = [];
         for (const e of entrances) {
-            if (current.length === 0) {
-                current.push(e);
-            } else {
+            if (!current.length) current.push(e);
+            else {
                 const last = current[current.length - 1];
                 const adjacent =
                     e.dir === last.dir &&
@@ -203,7 +201,7 @@ module.exports = {
         }
         if (current.length) grouped.push(current);
 
-        // === Step 3: Build wall per entrance ===
+        // === Step 3: Build wall line 1-2 tiles behind entrance with single rampart ===
         for (const group of grouped) {
             if (built >= builtPerTickLimit) break;
 
@@ -211,40 +209,37 @@ module.exports = {
             const start = group[0];
             const end = group[group.length - 1];
 
-            // Expand 1 tile wider than the opening
-            const tiles = [];
+            let tiles = [];
+
             if (dir === 'N' || dir === 'S') {
-                const minX = Math.max(start.x - 1, 0);
-                const maxX = Math.min(end.x + 1, 49);
-                const yWall = dir === 'N' ? 2 : 47;
+                const yWall = dir === 'N' ? start.y + 1 : start.y - 1; // one tile inside
+                const minX = Math.max(start.x - 1, 1);
+                const maxX = Math.min(end.x + 1, 48);
 
-                for (let x = minX; x <= maxX; x++) {
-                    tiles.push({ x, y: yWall });
-                }
+                // Main wall line
+                for (let x = minX; x <= maxX; x++) tiles.push({ x, y: yWall });
 
-                // Seal side edges
-                tiles.push({ x: minX, y: dir === 'N' ? 1 : 48 });
-                tiles.push({ x: maxX, y: dir === 'N' ? 1 : 48 });
+                // Side caps
+                tiles.push({ x: minX, y: yWall - (dir === 'N' ? -1 : 1) });
+                tiles.push({ x: maxX, y: yWall - (dir === 'N' ? -1 : 1) });
 
             } else {
-                const minY = Math.max(start.y - 1, 0);
-                const maxY = Math.min(end.y + 1, 49);
-                const xWall = dir === 'W' ? 2 : 47;
+                const xWall = dir === 'W' ? start.x + 1 : start.x - 1;
+                const minY = Math.max(start.y - 1, 1);
+                const maxY = Math.min(end.y + 1, 48);
 
-                for (let y = minY; y <= maxY; y++) {
-                    tiles.push({ x: xWall, y });
-                }
+                for (let y = minY; y <= maxY; y++) tiles.push({ x: xWall, y });
 
-                // Seal side edges
-                tiles.push({ x: dir === 'W' ? 1 : 48, y: minY });
-                tiles.push({ x: dir === 'W' ? 1 : 48, y: maxY });
+                // Side caps
+                tiles.push({ x: xWall - (dir === 'W' ? -1 : 1), y: minY });
+                tiles.push({ x: xWall - (dir === 'W' ? -1 : 1), y: maxY });
             }
 
-            // === Step 4: Place single gate in the middle ===
+            // Single rampart gate
             const midIndex = Math.floor(tiles.length / 2);
             const gate = tiles[midIndex];
 
-            // === Step 5: Build walls and rampart ===
+            // === Step 4: Place structures ===
             for (const pos of tiles) {
                 if (built >= builtPerTickLimit) break;
                 if (!this.isBuildableTile(room, pos.x, pos.y)) continue;
