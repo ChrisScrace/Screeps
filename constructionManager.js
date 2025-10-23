@@ -167,7 +167,7 @@ module.exports = {
         const maxPerTick = 5;
         let builtCount = 0;
 
-        // === Step 1: Find walkable edge tiles ===
+        // === Step 1: Find all edge tiles that are walkable ===
         const entrances = [];
         for (let x = 1; x < 49; x++) {
             if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0, dir: 'N' });
@@ -180,9 +180,11 @@ module.exports = {
 
         if (entrances.length === 0) return false;
 
-        // === Step 2: Group contiguous entrances along each edge ===
+        // === Step 2: Group contiguous edge tiles into entrances ===
         const grouped = [];
-        entrances.sort((a, b) => (a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)));
+        entrances.sort((a, b) =>
+            a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)
+        );
 
         let currentGroup = [];
         for (let i = 0; i < entrances.length; i++) {
@@ -192,7 +194,7 @@ module.exports = {
             } else {
                 const last = currentGroup[currentGroup.length - 1];
                 const isAdjacent =
-                    (e.dir === last.dir) &&
+                    e.dir === last.dir &&
                     ((Math.abs(e.x - last.x) === 1 && e.y === last.y) ||
                         (Math.abs(e.y - last.y) === 1 && e.x === last.x));
                 if (isAdjacent) {
@@ -205,13 +207,14 @@ module.exports = {
         }
         if (currentGroup.length > 0) grouped.push(currentGroup);
 
-        // === Step 3: Build full-length walls just inside the room ===
+        // === Step 3: Build sealed walls inside the room ===
         for (const group of grouped) {
             if (builtCount >= maxPerTick) break;
 
             const dir = group[0].dir;
             const wallLine = [];
 
+            // Compute inward offset for all tiles (2 in from edge)
             for (const e of group) {
                 let x = e.x;
                 let y = e.y;
@@ -222,26 +225,49 @@ module.exports = {
                 wallLine.push({ x, y });
             }
 
-            // Pick one or two central tiles for ramparts (so creeps can pass)
+            // === Extend the wall 1–2 tiles past each side if open ===
+            const start = wallLine[0];
+            const end = wallLine[wallLine.length - 1];
+
+            function extendIfOpen(base, dx, dy) {
+                for (let i = 1; i <= 2; i++) {
+                    const nx = base.x + dx * i;
+                    const ny = base.y + dy * i;
+                    if (nx <= 0 || nx >= 49 || ny <= 0 || ny >= 49) break;
+                    if (terrain.get(nx, ny) === TERRAIN_MASK_WALL) break;
+                    wallLine.push({ x: nx, y: ny });
+                }
+            }
+
+            if (dir === 'N' || dir === 'S') {
+                // Extend left and right
+                extendIfOpen(start, -1, 0);
+                extendIfOpen(end, 1, 0);
+            } else {
+                // Extend up and down
+                extendIfOpen(start, 0, -1);
+                extendIfOpen(end, 0, 1);
+            }
+
+            // === Choose gates (ramparts) ===
             const midIndex = Math.floor(wallLine.length / 2);
             const gateTiles = [];
-            if (wallLine.length <= 3) {
+            if (wallLine.length <= 4) {
                 gateTiles.push(wallLine[midIndex]);
-            } else if (wallLine.length <= 6) {
+            } else if (wallLine.length <= 8) {
                 gateTiles.push(wallLine[midIndex]);
             } else {
                 gateTiles.push(wallLine[midIndex - 1], wallLine[midIndex + 1]);
             }
 
+            // === Build ===
             for (let i = 0; i < wallLine.length; i++) {
                 if (builtCount >= maxPerTick) break;
-
                 const pos = wallLine[i];
                 if (!this.isBuildableTile(room, pos.x, pos.y)) continue;
 
                 const isGate = gateTiles.some(g => g.x === pos.x && g.y === pos.y);
                 const type = isGate ? STRUCTURE_RAMPART : STRUCTURE_WALL;
-
                 const result = room.createConstructionSite(pos.x, pos.y, type);
                 if (result === OK) {
                     builtCount++;
@@ -252,6 +278,7 @@ module.exports = {
 
         return builtCount > 0;
     },
+
 
 
     // -----------------------------
