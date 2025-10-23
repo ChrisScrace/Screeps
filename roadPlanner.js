@@ -1,10 +1,10 @@
 // utils/roadPlanner.js
 
 /**
- * Adaptive road planner.
+ * Adaptive road planner:
  * - Double roads for heavy traffic (spawn↔sources, spawn↔controller)
- * - Single roads for light traffic (sources↔controller, mineral routes)
- * - CPU-safe and construction-limit aware
+ * - Single roads for light traffic (sources↔controller, spawn↔extensions, minerals)
+ * - Avoid overwriting walls or existing sites
  */
 function planRoads(room) {
     if (!room.controller) return;
@@ -12,61 +12,44 @@ function planRoads(room) {
     const spawns = room.find(FIND_MY_SPAWNS);
     const sources = room.find(FIND_SOURCES);
     const minerals = room.find(FIND_MINERALS);
+    const extensions = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_EXTENSION });
 
     if (!spawns.length || sources.length === 0) return;
 
-    // Skip if we have too many construction sites (safety limit)
     const MAX_SITES = 50;
     if (room.find(FIND_CONSTRUCTION_SITES).length > MAX_SITES) return;
 
     /**
-     * Build a path of roads between two points.
+     * Build a road path between two points.
      * @param {RoomPosition} from
      * @param {RoomPosition} to
-     * @param {boolean} doubleStack - whether to make it two tiles wide
+     * @param {boolean} doubleStack - true = 2-tile wide road
      */
     function buildRoadPath(from, to, doubleStack = false) {
-        const path = room.findPath(from, to, {
-            ignoreCreeps: true,
-            ignoreRoads: true,
-            swampCost: 1, // encourage straight roads
-        });
+        const path = room.findPath(from, to, { ignoreCreeps: true, ignoreRoads: true, swampCost: 1 });
 
         for (const step of path) {
             const mainPos = new RoomPosition(step.x, step.y, room.name);
-            tryBuildRoad(mainPos, room);
+            tryBuildRoad(mainPos);
 
             if (doubleStack) {
                 for (const offset of adjacentOffsets()) {
                     const adjX = step.x + offset.x;
                     const adjY = step.y + offset.y;
-                    if (isInBounds(adjX, adjY)) {
-                        const terrain = room.getTerrain().get(adjX, adjY);
-                        if (terrain !== TERRAIN_MASK_WALL) {
-                            tryBuildRoad(new RoomPosition(adjX, adjY, room.name), room);
-                        }
+                    if (isInBounds(adjX, adjY) && room.getTerrain().get(adjX, adjY) !== TERRAIN_MASK_WALL) {
+                        tryBuildRoad(new RoomPosition(adjX, adjY, room.name));
                     }
                 }
             }
         }
     }
 
-    // Attempts to build a road if there’s no existing structure/site
-    function tryBuildRoad(pos, room) {
-        const terrain = room.getTerrain().get(pos.x, pos.y);
-        if (terrain === TERRAIN_MASK_WALL) return; // skip walls
-
-        const hasRoad = pos.lookFor(LOOK_STRUCTURES)
-            .some(s => s.structureType === STRUCTURE_ROAD);
-        const hasSite = pos.lookFor(LOOK_CONSTRUCTION_SITES)
-            .some(s => s.structureType === STRUCTURE_ROAD);
-
-        if (!hasRoad && !hasSite) {
-            room.createConstructionSite(pos, STRUCTURE_ROAD);
-        }
+    function tryBuildRoad(pos) {
+        const hasRoad = pos.lookFor(LOOK_STRUCTURES).some(s => s.structureType === STRUCTURE_ROAD);
+        const hasSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).some(s => s.structureType === STRUCTURE_ROAD);
+        if (!hasRoad && !hasSite) room.createConstructionSite(pos, STRUCTURE_ROAD);
     }
 
-    // Cardinal directions for 2-tile paths
     function adjacentOffsets() {
         return [
             { x: -1, y: 0 },
@@ -80,26 +63,25 @@ function planRoads(room) {
         return x > 0 && x < 49 && y > 0 && y < 49;
     }
 
-    // ---- ROAD LOGIC ----
+    // ---- Build roads ----
     for (const spawn of spawns) {
-        for (const source of sources) {
-            // Heavy route: spawn → source
-            buildRoadPath(spawn.pos, source.pos, true);
-        }
+        // Spawn ↔ Sources (heavy traffic)
+        for (const source of sources) buildRoadPath(spawn.pos, source.pos, true);
 
-        // Heavy route: spawn → controller
+        // Spawn ↔ Controller (heavy traffic)
         buildRoadPath(spawn.pos, room.controller.pos, true);
+
+        // Spawn ↔ Extensions (light traffic)
+        for (const ext of extensions) buildRoadPath(spawn.pos, ext.pos, false);
     }
 
-    // Lighter route: link sources to controller
-    for (const source of sources) {
-        buildRoadPath(source.pos, room.controller.pos, false);
-    }
+    // Sources ↔ Controller (light traffic)
+    for (const source of sources) buildRoadPath(source.pos, room.controller.pos, false);
 
-    // Optional: single road to minerals
+    // Minerals ↔ Closest spawn (light traffic)
     for (const mineral of minerals) {
         const closestSpawn = mineral.pos.findClosestByRange(spawns.map(s => s.pos));
-        buildRoadPath(mineral.pos, closestSpawn, false);
+        if (closestSpawn) buildRoadPath(mineral.pos, closestSpawn, false);
     }
 }
 

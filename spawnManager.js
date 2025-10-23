@@ -111,7 +111,7 @@ module.exports = {
         // 4. UPGRADERS
         // --------------------
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
-        const targetUpgraders = Math.min(4, Math.max(1, Math.floor(room.energyCapacityAvailable / 800)));
+        const targetUpgraders = Math.min(4, Math.max(1, Math.floor(room.energyCapacityAvailable / 400)));
         // scale upgraders by available energy capacity
 
         if (numUpgraders < targetUpgraders) {
