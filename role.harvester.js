@@ -2,13 +2,13 @@ const sourceManager = require('sourceManager');
 
 module.exports = {
     run(creep) {
-        // 1️⃣ If full, deliver immediately
+        // 1️⃣ Full → deliver energy
         if (creep.store.getFreeCapacity() === 0) {
             this.deliverEnergy(creep);
             return;
         }
 
-        // 2️⃣ Otherwise, harvest logic
+        // 2️⃣ Assign source if none
         if (!creep.memory.sourceId) {
             const source = creep.pos.findClosestByPath(FIND_SOURCES);
             if (source) creep.memory.sourceId = source.id;
@@ -17,11 +17,13 @@ module.exports = {
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) return;
 
+        // 3️⃣ Assign harvest tile if none
         if (!creep.memory.tile) {
             const tile = sourceManager.assignTile(source.id, creep.name, creep.room.name);
             if (tile) creep.memory.tile = tile;
         }
 
+        // 4️⃣ Move to tile
         const tile = creep.memory.tile;
         if (tile) {
             const targetPos = new RoomPosition(tile.x, tile.y, creep.room.name);
@@ -31,35 +33,14 @@ module.exports = {
             }
         }
 
-        // 3️⃣ Harvest if not full
+        // 5️⃣ Harvest
         creep.harvest(source);
     },
 
     deliverEnergy(creep) {
-        const haulersExist = _.some(Game.creeps, c => c.memory.role === 'hauler' && c.room.name === creep.room.name);
-
-        // 1️⃣ No haulers: deliver to nearest extension/spawn
-        if (!haulersExist) {
-            const target = creep.pos.findClosestByPath(FIND_STRUCTURES, {
-                filter: s =>
-                    (s.structureType === STRUCTURE_EXTENSION ||
-                        s.structureType === STRUCTURE_SPAWN) &&
-                    s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
-            });
-
-            if (target) {
-                if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(target, { visualizePathStyle: { stroke: '#ffffff' } });
-                }
-                return;
-            }
-        }
-
-        // 2️⃣ Haulers exist: if on or next to a container with space, transfer
+        // Try to transfer to nearby container first (range 1)
         const nearbyContainer = creep.pos.findInRange(FIND_STRUCTURES, 1, {
-            filter: s =>
-                s.structureType === STRUCTURE_CONTAINER &&
-                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+            filter: s => s.structureType === STRUCTURE_CONTAINER && s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         })[0];
 
         if (nearbyContainer) {
@@ -67,7 +48,7 @@ module.exports = {
             if (result === OK || result === ERR_FULL) return;
         }
 
-        // 3️⃣ Fallback: drop on ground
+        // If no container, drop energy on floor
         creep.drop(RESOURCE_ENERGY);
     },
 
