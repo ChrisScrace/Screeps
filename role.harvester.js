@@ -2,40 +2,39 @@ const sourceManager = require('sourceManager');
 
 module.exports = {
     run(creep) {
-        // === ASSIGN SOURCE ===
+        // 1️⃣ If full, deliver immediately
+        if (creep.store.getFreeCapacity() === 0) {
+            this.deliverEnergy(creep);
+            return;
+        }
+
+        // 2️⃣ Otherwise, harvest logic
         if (!creep.memory.sourceId) {
             const source = creep.pos.findClosestByPath(FIND_SOURCES);
-            if (!source) return;
-            creep.memory.sourceId = source.id;
+            if (source) creep.memory.sourceId = source.id;
         }
 
         const source = Game.getObjectById(creep.memory.sourceId);
         if (!source) return;
 
-        // === ASSIGN TILE ===
         if (!creep.memory.tile) {
             const tile = sourceManager.assignTile(source.id, creep.name, creep.room.name);
             if (tile) creep.memory.tile = tile;
         }
 
-        // === MOVE TO TILE ===
-        if (creep.memory.tile) {
-            const targetPos = new RoomPosition(creep.memory.tile.x, creep.memory.tile.y, creep.room.name);
+        const tile = creep.memory.tile;
+        if (tile) {
+            const targetPos = new RoomPosition(tile.x, tile.y, creep.room.name);
             if (!creep.pos.isEqualTo(targetPos)) {
                 creep.moveTo(targetPos, { visualizePathStyle: { stroke: '#ffaa00' } });
                 return;
             }
         }
 
-        // === HARVEST OR DELIVER ===
-        if (creep.store.getFreeCapacity() > 0) {
-            creep.harvest(source);
-            return;
-        }
+        // 3️⃣ Harvest if not full
+        creep.harvest(source);
+    }
 
-        // === FULL: HANDLE DELIVERY ===
-        this.deliverEnergy(creep);
-    },
 
     deliverEnergy(creep) {
         const haulersExist = _.some(Game.creeps, c => c.memory.role === 'hauler' && c.room.name === creep.room.name);
@@ -45,7 +44,7 @@ module.exports = {
             const target = creep.pos.findClosestByPath(FIND_STRUCTURES, {
                 filter: s =>
                     (s.structureType === STRUCTURE_EXTENSION ||
-                     s.structureType === STRUCTURE_SPAWN) &&
+                        s.structureType === STRUCTURE_SPAWN) &&
                     s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
             });
 
