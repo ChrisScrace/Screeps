@@ -1,3 +1,5 @@
+const energyManager = require('energyManager');
+
 module.exports = {
     run(creep) {
         // -------------------------
@@ -14,30 +16,7 @@ module.exports = {
         // 2. Collect energy if not building
         // -------------------------
         if (!creep.memory.building) {
-            let source = creep.pos.findClosestByPath(FIND_STRUCTURES, {
-                filter: s => (s.structureType === STRUCTURE_CONTAINER || s.structureType === STRUCTURE_STORAGE) 
-                             && s.store[RESOURCE_ENERGY] > 0
-            });
-
-            if (!source) {
-                const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, { 
-                    filter: r => r.resourceType === RESOURCE_ENERGY 
-                });
-                if (dropped) source = dropped;
-            }
-
-            if (!source) {
-                // Idle near controller if nothing to withdraw
-                if (creep.room.controller) creep.moveTo(creep.room.controller.pos, { visualizePathStyle: { stroke: '#ffaa00' } });
-                return;
-            }
-
-            if (source.resourceType) {
-                if (creep.pickup(source) === ERR_NOT_IN_RANGE) creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
-            } else {
-                if (creep.withdraw(source, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(source, { visualizePathStyle: { stroke: '#ffaa00' } });
-            }
-            return;
+            energyManager.fetchEnergy(creep);
         }
 
         // -------------------------

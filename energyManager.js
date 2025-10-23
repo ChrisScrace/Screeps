@@ -18,21 +18,8 @@ module.exports = {
             return true;
         }
 
-        // // -----------------------
-        // // 2. Haulers carrying energy
-        // // -----------------------
-        // const hauler = creep.pos.findClosestByPath(FIND_MY_CREEPS, {
-        //     filter: c => c.memory.role === 'hauler' && c.store[RESOURCE_ENERGY] > 0
-        // });
-        // if (hauler) {
-        //     if (creep.withdraw(hauler, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-        //         creep.moveTo(hauler, { visualizePathStyle: { stroke: '#ffaa00' } });
-        //     }
-        //     return true;
-        // }
-
         // -----------------------
-        // 3. Dropped energy
+        // 2. Dropped energy
         // -----------------------
         const dropped = creep.pos.findClosestByPath(FIND_DROPPED_RESOURCES, {
             filter: r => r.resourceType === RESOURCE_ENERGY
@@ -45,7 +32,7 @@ module.exports = {
         }
 
         // -----------------------
-        // 4. Spawn (fallback)
+        // 3. Spawn (fallback)
         // -----------------------
         const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS)[0];
         if (spawn && spawn.energy > 0) { // ✅ use spawn.energy instead of spawn.store
@@ -55,10 +42,8 @@ module.exports = {
             return true;
         }
 
-
-
         // -----------------------
-        // 5. Fallback: harvest directly
+        // 4. Fallback: harvest directly
         // -----------------------
         const source = creep.pos.findClosestByPath(FIND_SOURCES_ACTIVE);
         if (source) {
