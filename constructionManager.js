@@ -174,8 +174,17 @@ module.exports = {
         const sites = room.find(FIND_CONSTRUCTION_SITES);
         for (const site of sites) {
             const sitePriority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
+
             if (sitePriority > priorityLevel && site.progress === 0) {
-                site.remove();
+                // Skip removing if a higher-priority structure or site is at this position
+                const hasHighPriority = room.lookForAt(LOOK_STRUCTURES, site.pos.x, site.pos.y)
+                    .some(s => (STRUCTURE_PRIORITY[s.structureType] || PRIORITY.ROAD) <= priorityLevel);
+                const hasHighPrioritySite = room.lookForAt(LOOK_CONSTRUCTION_SITES, site.pos.x, site.pos.y)
+                    .some(s => (STRUCTURE_PRIORITY[s.structureType] || PRIORITY.ROAD) <= priorityLevel);
+
+                if (!hasHighPriority && !hasHighPrioritySite) {
+                    site.remove();
+                }
             }
         }
     },
