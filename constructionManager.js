@@ -32,14 +32,7 @@ module.exports = {
         // === PRIORITY 3: Towers ===
         if (this.buildTowers(room)) return;
 
-        // === NEW: PRIORITY 4: Entrance walls/ramparts ===
-        if (this.buildEntranceDefenses(room)) return;
-
-        if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
-            this.buildRoads(room);
-        }
-
-        // === PRIORITY 5: Roads (only if no other sites exist) ===
+        // === PRIORITY 4: Roads (only if no other sites exist) ===
         if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
             this.buildRoads(room);
         }
