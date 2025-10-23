@@ -164,13 +164,11 @@ module.exports = {
     // -----------------------------
     buildEntranceDefenses(room) {
         const terrain = room.getTerrain();
-        const builtThisTick = false;
-        const maxPerTick = 3; // limit per tick to avoid site spam
+        const maxPerTick = 5;
         let builtCount = 0;
 
+        // === Step 1: Find walkable edge tiles ===
         const entrances = [];
-
-        // === Step 1: Find walkable tiles at edges ===
         for (let x = 1; x < 49; x++) {
             if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0, dir: 'N' });
             if (terrain.get(x, 49) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 49, dir: 'S' });
@@ -182,7 +180,7 @@ module.exports = {
 
         if (entrances.length === 0) return false;
 
-        // === Step 2: Group entrances by contiguous runs ===
+        // === Step 2: Group contiguous entrances along each edge ===
         const grouped = [];
         entrances.sort((a, b) => (a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)));
 
@@ -197,7 +195,6 @@ module.exports = {
                     (e.dir === last.dir) &&
                     ((Math.abs(e.x - last.x) === 1 && e.y === last.y) ||
                         (Math.abs(e.y - last.y) === 1 && e.x === last.x));
-
                 if (isAdjacent) {
                     currentGroup.push(e);
                 } else {
@@ -208,59 +205,44 @@ module.exports = {
         }
         if (currentGroup.length > 0) grouped.push(currentGroup);
 
-        // === Step 3: For each grouped entrance, build a defensive wall line ===
+        // === Step 3: Build full-length walls just inside the room ===
         for (const group of grouped) {
             if (builtCount >= maxPerTick) break;
 
-            // Find approximate midpoint of entrance
-            const mid = group[Math.floor(group.length / 2)];
-            let line = [];
+            const dir = group[0].dir;
+            const wallLine = [];
 
-            // Step inward a few tiles to build walls just inside the room
-            switch (mid.dir) {
-                case 'N':
-                    for (let dx = -1; dx <= 1; dx++) {
-                        const x = Math.min(48, Math.max(1, mid.x + dx));
-                        const y = 2;
-                        line.push({ x, y });
-                    }
-                    break;
-                case 'S':
-                    for (let dx = -1; dx <= 1; dx++) {
-                        const x = Math.min(48, Math.max(1, mid.x + dx));
-                        const y = 47;
-                        line.push({ x, y });
-                    }
-                    break;
-                case 'W':
-                    for (let dy = -1; dy <= 1; dy++) {
-                        const x = 2;
-                        const y = Math.min(48, Math.max(1, mid.y + dy));
-                        line.push({ x, y });
-                    }
-                    break;
-                case 'E':
-                    for (let dy = -1; dy <= 1; dy++) {
-                        const x = 47;
-                        const y = Math.min(48, Math.max(1, mid.y + dy));
-                        line.push({ x, y });
-                    }
-                    break;
+            for (const e of group) {
+                let x = e.x;
+                let y = e.y;
+                if (dir === 'N') y = 2;
+                else if (dir === 'S') y = 47;
+                else if (dir === 'W') x = 2;
+                else if (dir === 'E') x = 47;
+                wallLine.push({ x, y });
             }
 
-            // Choose one tile in the wall line for a rampart (gate)
-            const rampIndex = Math.floor(line.length / 2);
+            // Pick one or two central tiles for ramparts (so creeps can pass)
+            const midIndex = Math.floor(wallLine.length / 2);
+            const gateTiles = [];
+            if (wallLine.length <= 3) {
+                gateTiles.push(wallLine[midIndex]);
+            } else if (wallLine.length <= 6) {
+                gateTiles.push(wallLine[midIndex]);
+            } else {
+                gateTiles.push(wallLine[midIndex - 1], wallLine[midIndex + 1]);
+            }
 
-            // Build structures
-            for (let i = 0; i < line.length; i++) {
-                const { x, y } = line[i];
+            for (let i = 0; i < wallLine.length; i++) {
                 if (builtCount >= maxPerTick) break;
 
-                if (!this.isBuildableTile(room, x, y)) continue;
+                const pos = wallLine[i];
+                if (!this.isBuildableTile(room, pos.x, pos.y)) continue;
 
-                const type = i === rampIndex ? STRUCTURE_RAMPART : STRUCTURE_WALL;
-                const result = room.createConstructionSite(x, y, type);
+                const isGate = gateTiles.some(g => g.x === pos.x && g.y === pos.y);
+                const type = isGate ? STRUCTURE_RAMPART : STRUCTURE_WALL;
 
+                const result = room.createConstructionSite(pos.x, pos.y, type);
                 if (result === OK) {
                     builtCount++;
                     this.cancelLowerPrioritySites(room, PRIORITY.DEFENSE);
@@ -270,6 +252,7 @@ module.exports = {
 
         return builtCount > 0;
     },
+
 
     // -----------------------------
     // PRIORITY 5: ROADS
