@@ -164,120 +164,104 @@ module.exports = {
     // -----------------------------
     buildEntranceDefenses(room) {
         const terrain = room.getTerrain();
-        const maxPerTick = 5;
-        let builtCount = 0;
+        const builtPerTickLimit = 5;
+        let built = 0;
 
-        // === Step 1: Find all edge tiles that are walkable ===
+        // === Step 1: Find edge entrances ===
         const entrances = [];
-        for (let x = 1; x < 49; x++) {
+        for (let x = 0; x < 50; x++) {
             if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0, dir: 'N' });
             if (terrain.get(x, 49) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 49, dir: 'S' });
         }
-        for (let y = 1; y < 49; y++) {
+        for (let y = 0; y < 50; y++) {
             if (terrain.get(0, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 0, y, dir: 'W' });
             if (terrain.get(49, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 49, y, dir: 'E' });
         }
 
         if (entrances.length === 0) return false;
 
-        // === Step 2: Group contiguous edge tiles into entrances ===
+        // === Step 2: Group contiguous tiles per direction ===
         const grouped = [];
-        entrances.sort((a, b) =>
-            a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)
-        );
+        entrances.sort((a, b) => (a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)));
 
-        let currentGroup = [];
-        for (let i = 0; i < entrances.length; i++) {
-            const e = entrances[i];
-            if (currentGroup.length === 0) {
-                currentGroup.push(e);
+        let current = [];
+        for (const e of entrances) {
+            if (current.length === 0) {
+                current.push(e);
             } else {
-                const last = currentGroup[currentGroup.length - 1];
-                const isAdjacent =
+                const last = current[current.length - 1];
+                const adjacent =
                     e.dir === last.dir &&
-                    ((Math.abs(e.x - last.x) === 1 && e.y === last.y) ||
-                        (Math.abs(e.y - last.y) === 1 && e.x === last.x));
-                if (isAdjacent) {
-                    currentGroup.push(e);
-                } else {
-                    grouped.push(currentGroup);
-                    currentGroup = [e];
+                    ((e.x === last.x && Math.abs(e.y - last.y) === 1) ||
+                        (e.y === last.y && Math.abs(e.x - last.x) === 1));
+                if (adjacent) current.push(e);
+                else {
+                    grouped.push(current);
+                    current = [e];
                 }
             }
         }
-        if (currentGroup.length > 0) grouped.push(currentGroup);
+        if (current.length) grouped.push(current);
 
-        // === Step 3: Build sealed walls inside the room ===
+        // === Step 3: For each entrance, build a full sealed defense ===
         for (const group of grouped) {
-            if (builtCount >= maxPerTick) break;
+            if (built >= builtPerTickLimit) break;
 
             const dir = group[0].dir;
-            const wallLine = [];
+            const start = group[0];
+            const end = group[group.length - 1];
 
-            // Compute inward offset for all tiles (2 in from edge)
-            for (const e of group) {
-                let x = e.x;
-                let y = e.y;
-                if (dir === 'N') y = 2;
-                else if (dir === 'S') y = 47;
-                else if (dir === 'W') x = 2;
-                else if (dir === 'E') x = 47;
-                wallLine.push({ x, y });
-            }
-
-            // === Extend the wall 1–2 tiles past each side if open ===
-            const start = wallLine[0];
-            const end = wallLine[wallLine.length - 1];
-
-            function extendIfOpen(base, dx, dy) {
-                for (let i = 1; i <= 2; i++) {
-                    const nx = base.x + dx * i;
-                    const ny = base.y + dy * i;
-                    if (nx <= 0 || nx >= 49 || ny <= 0 || ny >= 49) break;
-                    if (terrain.get(nx, ny) === TERRAIN_MASK_WALL) break;
-                    wallLine.push({ x: nx, y: ny });
-                }
-            }
-
+            // One tile wider than entrance (extend one step on both sides)
+            const extraTiles = [];
             if (dir === 'N' || dir === 'S') {
-                // Extend left and right
-                extendIfOpen(start, -1, 0);
-                extendIfOpen(end, 1, 0);
+                const minX = Math.max(start.x - 1, 0);
+                const maxX = Math.min(end.x + 1, 49);
+                const yWall = dir === 'N' ? 2 : 47;
+
+                for (let x = minX; x <= maxX; x++) {
+                    extraTiles.push({ x, y: yWall });
+                }
+
+                // Wrap ends toward the entrance edge to close corners
+                extraTiles.push({ x: minX, y: dir === 'N' ? 1 : 48 });
+                extraTiles.push({ x: maxX, y: dir === 'N' ? 1 : 48 });
+
             } else {
-                // Extend up and down
-                extendIfOpen(start, 0, -1);
-                extendIfOpen(end, 0, 1);
+                const minY = Math.max(start.y - 1, 0);
+                const maxY = Math.min(end.y + 1, 49);
+                const xWall = dir === 'W' ? 2 : 47;
+
+                for (let y = minY; y <= maxY; y++) {
+                    extraTiles.push({ x: xWall, y });
+                }
+
+                // Wrap ends toward entrance edge
+                extraTiles.push({ x: dir === 'W' ? 1 : 48, y: minY });
+                extraTiles.push({ x: dir === 'W' ? 1 : 48, y: maxY });
             }
 
-            // === Choose gates (ramparts) ===
-            const midIndex = Math.floor(wallLine.length / 2);
-            const gateTiles = [];
-            if (wallLine.length <= 4) {
-                gateTiles.push(wallLine[midIndex]);
-            } else if (wallLine.length <= 8) {
-                gateTiles.push(wallLine[midIndex]);
-            } else {
-                gateTiles.push(wallLine[midIndex - 1], wallLine[midIndex + 1]);
-            }
+            // Choose gate (one or two ramparts)
+            const mid = Math.floor(extraTiles.length / 2);
+            const gateTiles = [extraTiles[mid]];
 
-            // === Build ===
-            for (let i = 0; i < wallLine.length; i++) {
-                if (builtCount >= maxPerTick) break;
-                const pos = wallLine[i];
+            // Build them
+            for (const pos of extraTiles) {
+                if (built >= builtPerTickLimit) break;
                 if (!this.isBuildableTile(room, pos.x, pos.y)) continue;
 
                 const isGate = gateTiles.some(g => g.x === pos.x && g.y === pos.y);
                 const type = isGate ? STRUCTURE_RAMPART : STRUCTURE_WALL;
-                const result = room.createConstructionSite(pos.x, pos.y, type);
-                if (result === OK) {
-                    builtCount++;
+
+                if (room.createConstructionSite(pos.x, pos.y, type) === OK) {
+                    built++;
                     this.cancelLowerPrioritySites(room, PRIORITY.DEFENSE);
                 }
             }
         }
 
-        return builtCount > 0;
+        return built > 0;
     },
+
 
 
 
