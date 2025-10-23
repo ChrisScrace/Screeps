@@ -164,45 +164,111 @@ module.exports = {
     // -----------------------------
     buildEntranceDefenses(room) {
         const terrain = room.getTerrain();
+        const builtThisTick = false;
+        const maxPerTick = 3; // limit per tick to avoid site spam
+        let builtCount = 0;
+
         const entrances = [];
 
-        // Step 1: Detect walkable tiles at room edges
-        for (let x = 0; x < 50; x++) {
-            if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0 });
-            if (terrain.get(x, 49) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 49 });
+        // === Step 1: Find walkable tiles at edges ===
+        for (let x = 1; x < 49; x++) {
+            if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0, dir: 'N' });
+            if (terrain.get(x, 49) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 49, dir: 'S' });
         }
         for (let y = 1; y < 49; y++) {
-            if (terrain.get(0, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 0, y });
-            if (terrain.get(49, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 49, y });
+            if (terrain.get(0, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 0, y, dir: 'W' });
+            if (terrain.get(49, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 49, y, dir: 'E' });
         }
 
-        // No entrances? Fully sealed room
         if (entrances.length === 0) return false;
 
-        // Step 2: For each entrance, trace a short inward corridor and pick the narrowest part
-        for (const entry of entrances) {
-            const choke = this.findChokepoint(room, entry, terrain);
-            if (!choke) continue;
+        // === Step 2: Group entrances by contiguous runs ===
+        const grouped = [];
+        entrances.sort((a, b) => (a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)));
 
-            // Step 3: Build a wall line at the chokepoint, with one rampart as gate
-            const rampartIndex = Math.floor(Math.random() * choke.length);
-            for (let i = 0; i < choke.length; i++) {
-                const { x, y } = choke[i];
-                const type = i === rampartIndex ? STRUCTURE_RAMPART : STRUCTURE_WALL;
+        let currentGroup = [];
+        for (let i = 0; i < entrances.length; i++) {
+            const e = entrances[i];
+            if (currentGroup.length === 0) {
+                currentGroup.push(e);
+            } else {
+                const last = currentGroup[currentGroup.length - 1];
+                const isAdjacent =
+                    (e.dir === last.dir) &&
+                    ((Math.abs(e.x - last.x) === 1 && e.y === last.y) ||
+                        (Math.abs(e.y - last.y) === 1 && e.x === last.x));
 
-                // Skip if already built or planned
-                const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
-                const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
-                if (hasStructure || hasSite) continue;
+                if (isAdjacent) {
+                    currentGroup.push(e);
+                } else {
+                    grouped.push(currentGroup);
+                    currentGroup = [e];
+                }
+            }
+        }
+        if (currentGroup.length > 0) grouped.push(currentGroup);
 
-                if (room.createConstructionSite(x, y, type) === OK) {
-                    this.cancelLowerPrioritySites(room, 3.5);
-                    return true; // build one per tick
+        // === Step 3: For each grouped entrance, build a defensive wall line ===
+        for (const group of grouped) {
+            if (builtCount >= maxPerTick) break;
+
+            // Find approximate midpoint of entrance
+            const mid = group[Math.floor(group.length / 2)];
+            let line = [];
+
+            // Step inward a few tiles to build walls just inside the room
+            switch (mid.dir) {
+                case 'N':
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const x = Math.min(48, Math.max(1, mid.x + dx));
+                        const y = 2;
+                        line.push({ x, y });
+                    }
+                    break;
+                case 'S':
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const x = Math.min(48, Math.max(1, mid.x + dx));
+                        const y = 47;
+                        line.push({ x, y });
+                    }
+                    break;
+                case 'W':
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const x = 2;
+                        const y = Math.min(48, Math.max(1, mid.y + dy));
+                        line.push({ x, y });
+                    }
+                    break;
+                case 'E':
+                    for (let dy = -1; dy <= 1; dy++) {
+                        const x = 47;
+                        const y = Math.min(48, Math.max(1, mid.y + dy));
+                        line.push({ x, y });
+                    }
+                    break;
+            }
+
+            // Choose one tile in the wall line for a rampart (gate)
+            const rampIndex = Math.floor(line.length / 2);
+
+            // Build structures
+            for (let i = 0; i < line.length; i++) {
+                const { x, y } = line[i];
+                if (builtCount >= maxPerTick) break;
+
+                if (!this.isBuildableTile(room, x, y)) continue;
+
+                const type = i === rampIndex ? STRUCTURE_RAMPART : STRUCTURE_WALL;
+                const result = room.createConstructionSite(x, y, type);
+
+                if (result === OK) {
+                    builtCount++;
+                    this.cancelLowerPrioritySites(room, PRIORITY.DEFENSE);
                 }
             }
         }
 
-        return false;
+        return builtCount > 0;
     },
 
     // -----------------------------
@@ -254,75 +320,5 @@ module.exports = {
             const sitePriority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
             return sitePriority < priorityLevel;
         });
-    },
-
-    /**
- * Finds a chokepoint (narrowest pass) a few tiles inward from the given entrance.
- * Returns an array of positions for the wall line.
- */
-    findChokepoint(room, entry, terrain) {
-        if (!room || !entry || !terrain) {
-            console.log(`[${room && room.name}] ⚠️ Invalid arguments passed to findChokepoint`);
-            return null;
-        }
-
-        const visited = new Set();
-        const queue = [{ x: entry.x, y: entry.y, dist: 0 }];
-        const insideTiles = [];
-
-        // Flood-fill inward (up to 5 tiles deep)
-        while (queue.length > 0) {
-            const { x, y, dist } = queue.shift();
-            const key = `${x},${y}`;
-            if (visited.has(key)) continue;
-            visited.add(key);
-
-            // Avoid edges or out-of-bounds
-            if (x <= 0 || x >= 49 || y <= 0 || y >= 49) continue;
-
-            // Skip walls
-            const terrainType = terrain.get(x, y);
-            if (terrainType === TERRAIN_MASK_WALL) continue;
-
-            insideTiles.push({ x, y, dist });
-
-            // Expand flood fill
-            if (dist < 5) {
-                // Only expand in cardinal directions (no diagonals)
-                if (x > 0) queue.push({ x: x - 1, y, dist: dist + 1 });
-                if (x < 49) queue.push({ x: x + 1, y, dist: dist + 1 });
-                if (y > 0) queue.push({ x, y: y - 1, dist: dist + 1 });
-                if (y < 49) queue.push({ x, y: y + 1, dist: dist + 1 });
-            }
-        }
-
-        if (insideTiles.length === 0) {
-            console.log(`[${room.name}] ❌ No walkable tiles found near entry ${entry.x},${entry.y}`);
-            return null;
-        }
-
-        // Group by distance
-        const byDist = {};
-        for (const t of insideTiles) {
-            if (!byDist[t.dist]) byDist[t.dist] = [];
-            byDist[t.dist].push(t);
-        }
-
-        // Find the smallest cross-section of walkable tiles (the choke)
-        const narrowDist = Object.keys(byDist)
-            .map(Number)
-            .sort((a, b) => a - b)
-            .find(d => byDist[d].length > 0 && byDist[d].length <= 3);
-
-        if (!narrowDist) {
-            console.log(`[${room.name}] ⚠️ No narrow chokepoint found for entry ${entry.x},${entry.y}`);
-            return null;
-        }
-
-        const chokeTiles = byDist[narrowDist];
-        if (!chokeTiles || chokeTiles.length === 0) return null;
-
-        // Return tiles as RoomPositions
-        return chokeTiles.map(t => new RoomPosition(t.x, t.y, room.name));
-    },
+    }
 };
