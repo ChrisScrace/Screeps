@@ -49,7 +49,7 @@ module.exports = {
 
         // Initialize source memory
         sourceManager.initRoom(room);
-        const sources = Memory.rooms[room.name]?.sources || {};
+        const sources = (Memory.rooms[room.name] && Memory.rooms[room.name].sources) || {};
 
         // --------------------
         // 1. HARVESTERS
