@@ -30,7 +30,7 @@ module.exports = {
         }
 
         // -------------------------
-        // 3. Deliver energy
+        // 3. Deliver energy to spawn/extensions
         // -------------------------
         let deliverTarget = creep.pos.findClosestByPath(FIND_STRUCTURES, {
             filter: s =>
@@ -46,17 +46,22 @@ module.exports = {
         }
 
         // -------------------------
-        // 4. No delivery target? Switch to builder/upgrader
+        // 4. Deliver energy to builders
         // -------------------------
-        const site = creep.pos.findClosestByPath(FIND_CONSTRUCTION_SITES);
-        if (site) {
-            if (creep.build(site) === ERR_NOT_IN_RANGE) {
-                creep.moveTo(site, { visualizePathStyle: { stroke: '#ffffff' } });
+        const builder = creep.pos.findClosestByPath(FIND_MY_CREEPS, {
+            filter: c => c.memory.role === 'builder' && c.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+
+        if (builder) {
+            if (creep.transfer(builder, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                creep.moveTo(builder, { visualizePathStyle: { stroke: '#00ff00' } });
             }
-        } else if (creep.room.controller) {
-            if (creep.upgradeController(creep.room.controller) === ERR_NOT_IN_RANGE) {
-                creep.moveTo(creep.room.controller.pos, { visualizePathStyle: { stroke: '#00ff00' } });
-            }
+            return;
         }
+
+        // -------------------------
+        // 5. Drop on ground if nowhere else
+        // -------------------------
+        creep.drop(RESOURCE_ENERGY);
     }
 };
