@@ -1,6 +1,8 @@
 const spawnManager = require('spawnManager');
 const constructionManager = require('constructionManager');
 const sourceManager = require('sourceManager');
+const towerManager = require('towerManager');
+
 const roles = {
     harvester: require('role.harvester'),
     hauler: require('role.hauler'),
@@ -34,6 +36,9 @@ module.exports.loop = function() {
 
         // Manage construction
         constructionManager.run(room);
+
+        // Manage towers
+        towerManager.run(room);
     }
 
     // --- RUN CREEPS ---
