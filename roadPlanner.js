@@ -59,7 +59,10 @@ function planRoads(room) {
 
     // Attempts to build a road if there’s no existing structure/site and tile is safe
     function tryBuildRoad(pos) {
-        const terrain = pos.room.getTerrain().get(pos.x, pos.y);
+        const room = Game.rooms[pos.roomName]; // <- get Room object
+        if (!room) return; // room not visible, can't build
+
+        const terrain = room.getTerrain().get(pos.x, pos.y);
         if (terrain === TERRAIN_MASK_WALL) return;
 
         // Prevent roads on sources/minerals
@@ -67,8 +70,10 @@ function planRoads(room) {
 
         const hasRoad = pos.lookFor(LOOK_STRUCTURES).some(s => s.structureType === STRUCTURE_ROAD);
         const hasSite = pos.lookFor(LOOK_CONSTRUCTION_SITES).some(s => s.structureType === STRUCTURE_ROAD);
-        if (!hasRoad && !hasSite) pos.room.createConstructionSite(pos, STRUCTURE_ROAD);
+
+        if (!hasRoad && !hasSite) room.createConstructionSite(pos, STRUCTURE_ROAD);
     }
+
 
     function adjacentOffsets() {
         return [
