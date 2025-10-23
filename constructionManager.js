@@ -180,7 +180,7 @@ module.exports = {
 
         if (entrances.length === 0) return false;
 
-        // === Step 2: Group contiguous tiles per direction ===
+        // === Step 2: Group contiguous entrance tiles ===
         const grouped = [];
         entrances.sort((a, b) => (a.dir === b.dir ? (a.x - b.x || a.y - b.y) : a.dir.localeCompare(b.dir)));
 
@@ -203,7 +203,7 @@ module.exports = {
         }
         if (current.length) grouped.push(current);
 
-        // === Step 3: For each entrance, build a full sealed defense ===
+        // === Step 3: Build wall per entrance ===
         for (const group of grouped) {
             if (built >= builtPerTickLimit) break;
 
@@ -211,20 +211,20 @@ module.exports = {
             const start = group[0];
             const end = group[group.length - 1];
 
-            // One tile wider than entrance (extend one step on both sides)
-            const extraTiles = [];
+            // Expand 1 tile wider than the opening
+            const tiles = [];
             if (dir === 'N' || dir === 'S') {
                 const minX = Math.max(start.x - 1, 0);
                 const maxX = Math.min(end.x + 1, 49);
                 const yWall = dir === 'N' ? 2 : 47;
 
                 for (let x = minX; x <= maxX; x++) {
-                    extraTiles.push({ x, y: yWall });
+                    tiles.push({ x, y: yWall });
                 }
 
-                // Wrap ends toward the entrance edge to close corners
-                extraTiles.push({ x: minX, y: dir === 'N' ? 1 : 48 });
-                extraTiles.push({ x: maxX, y: dir === 'N' ? 1 : 48 });
+                // Seal side edges
+                tiles.push({ x: minX, y: dir === 'N' ? 1 : 48 });
+                tiles.push({ x: maxX, y: dir === 'N' ? 1 : 48 });
 
             } else {
                 const minY = Math.max(start.y - 1, 0);
@@ -232,25 +232,26 @@ module.exports = {
                 const xWall = dir === 'W' ? 2 : 47;
 
                 for (let y = minY; y <= maxY; y++) {
-                    extraTiles.push({ x: xWall, y });
+                    tiles.push({ x: xWall, y });
                 }
 
-                // Wrap ends toward entrance edge
-                extraTiles.push({ x: dir === 'W' ? 1 : 48, y: minY });
-                extraTiles.push({ x: dir === 'W' ? 1 : 48, y: maxY });
+                // Seal side edges
+                tiles.push({ x: dir === 'W' ? 1 : 48, y: minY });
+                tiles.push({ x: dir === 'W' ? 1 : 48, y: maxY });
             }
 
-            // Choose gate (one or two ramparts)
-            const mid = Math.floor(extraTiles.length / 2);
-            const gateTiles = [extraTiles[mid]];
+            // === Step 4: Place single gate in the middle ===
+            const midIndex = Math.floor(tiles.length / 2);
+            const gate = tiles[midIndex];
 
-            // Build them
-            for (const pos of extraTiles) {
+            // === Step 5: Build walls and rampart ===
+            for (const pos of tiles) {
                 if (built >= builtPerTickLimit) break;
                 if (!this.isBuildableTile(room, pos.x, pos.y)) continue;
 
-                const isGate = gateTiles.some(g => g.x === pos.x && g.y === pos.y);
-                const type = isGate ? STRUCTURE_RAMPART : STRUCTURE_WALL;
+                const type = (pos.x === gate.x && pos.y === gate.y)
+                    ? STRUCTURE_RAMPART
+                    : STRUCTURE_WALL;
 
                 if (room.createConstructionSite(pos.x, pos.y, type) === OK) {
                     built++;
@@ -261,9 +262,6 @@ module.exports = {
 
         return built > 0;
     },
-
-
-
 
     // -----------------------------
     // PRIORITY 5: ROADS
