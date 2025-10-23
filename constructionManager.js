@@ -50,22 +50,19 @@ module.exports = {
             const tiles = sourceManager.getTilesForSource(source.id, room.name);
             if (!tiles || tiles.length === 0) continue;
 
-            // Remove lower-priority planned sites
-            this.cancelLowerPrioritySites(room, PRIORITY.CONTAINER);
-
             for (const tile of tiles) {
-                const x = tile.x, y = tile.y;
+                const { x, y } = tile;
 
                 const terrain = room.getTerrain().get(x, y);
                 if (terrain === TERRAIN_MASK_WALL) continue;
 
-                // Remove any blocking construction sites except containers
+                // Remove blocking sites that aren't containers
                 const blockingSites = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y);
                 for (const site of blockingSites) {
                     if (site.structureType !== STRUCTURE_CONTAINER && site.progress === 0) site.remove();
                 }
 
-                // Skip if container already exists or is planned
+                // Skip if container already exists or planned
                 const hasContainer = room.lookForAt(LOOK_STRUCTURES, x, y)
                     .some(s => s.structureType === STRUCTURE_CONTAINER);
                 const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y)
@@ -73,6 +70,7 @@ module.exports = {
                 if (hasContainer || hasSite) continue;
 
                 if (room.createConstructionSite(x, y, STRUCTURE_CONTAINER) === OK) {
+                    this.cancelLowerPrioritySites(room, PRIORITY.CONTAINER);
                     built = true;
                     break;
                 }
@@ -98,9 +96,6 @@ module.exports = {
         const maxExtensions = limits[room.controller.level] || 0;
         if (extensions.length + sites.length >= maxExtensions) return false;
 
-        // Remove lower-priority sites (towers/roads)
-        this.cancelLowerPrioritySites(room, PRIORITY.EXTENSION);
-
         const spacing = 2;
         for (let dx = -6; dx <= 6; dx++) {
             for (let dy = -6; dy <= 6; dy++) {
@@ -111,6 +106,7 @@ module.exports = {
                 if (!this.isBuildableTile(room, x, y)) continue;
 
                 if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
+                    this.cancelLowerPrioritySites(room, PRIORITY.EXTENSION);
                     return true;
                 }
             }
@@ -131,8 +127,6 @@ module.exports = {
         const maxTowers = Math.min(1 + Math.floor(room.controller.level / 2), 6);
         if (towers.length + sites.length >= maxTowers) return false;
 
-        this.cancelLowerPrioritySites(room, PRIORITY.TOWER);
-
         const center = room.controller.pos;
         const offsets = [
             { x: -2, y: -2 }, { x: 2, y: -2 },
@@ -145,6 +139,7 @@ module.exports = {
             if (!this.isBuildableTile(room, x, y)) continue;
 
             if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) {
+                this.cancelLowerPrioritySites(room, PRIORITY.TOWER);
                 return true;
             }
         }

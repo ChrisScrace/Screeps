@@ -49,7 +49,7 @@ module.exports = {
 
         // Initialize source memory
         sourceManager.initRoom(room);
-        const sources = Memory.rooms[room.name].sources;
+        const sources = Memory.rooms[room.name]?.sources || {};
 
         // --------------------
         // 1. HARVESTERS
@@ -76,22 +76,40 @@ module.exports = {
         // --------------------
         const haulers = creepsByRole['hauler'] || [];
         const freeEnergy = room.find(FIND_DROPPED_RESOURCES, { filter: r => r.resourceType === RESOURCE_ENERGY });
-        if (freeEnergy.length > haulers.length) {
+        const energyContainers = room.find(FIND_STRUCTURES, {
+            filter: s => (s.structureType === STRUCTURE_CONTAINER || s.structureType === STRUCTURE_STORAGE) &&
+                s.store[RESOURCE_ENERGY] > 50
+        });
+
+        const energySources = freeEnergy.length + energyContainers.length;
+        if (energySources > haulers.length) {
             return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
         }
 
         // --------------------
-        // 3. UPGRADERS / BUILDERS
+        // 3. BUILDERS
+        // --------------------
+        const numBuilders = (creepsByRole['builder'] || []).length;
+        const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
+
+        // Calculate total remaining energy/work
+        const totalEnergyRequired = constructionSites.reduce((sum, site) => sum + (site.progressTotal - site.progress), 0);
+        const targetBuilders = Math.min(4, Math.max(1, Math.ceil(totalEnergyRequired / 500)));
+
+        if (numBuilders < targetBuilders) {
+            return this.spawnCreep(spawn, 'builder', null, energyAvailable);
+        }
+
+        // --------------------
+        // 4. UPGRADERS
         // --------------------
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
-        const numBuilders = (creepsByRole['builder'] || []).length;
-        const constructionSites = room.find(FIND_CONSTRUCTION_SITES).length;
+        const targetUpgraders = Math.min(4, Math.max(1, Math.floor(room.energyCapacityAvailable / 800)));
+        // scale upgraders by available energy capacity
 
-        const targetUpgraders = room.controller.level >= 3 ? 3 : 2;
-        const targetBuilders = constructionSites > 5 ? 2 : 1;
-
-        if (numUpgraders < targetUpgraders) return this.spawnCreep(spawn, 'upgrader', null, energyAvailable);
-        if (numBuilders < targetBuilders) return this.spawnCreep(spawn, 'builder', null, energyAvailable);
+        if (numUpgraders < targetUpgraders) {
+            return this.spawnCreep(spawn, 'upgrader', null, energyAvailable);
+        }
     },
 
     spawnCreep(spawn, role, sourceId = null, energy) {
