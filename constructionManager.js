@@ -261,50 +261,68 @@ module.exports = {
  * Returns an array of positions for the wall line.
  */
     findChokepoint(room, entry, terrain) {
+        if (!room || !entry || !terrain) {
+            console.log(`[${room && room.name}] ⚠️ Invalid arguments passed to findChokepoint`);
+            return null;
+        }
+
         const visited = new Set();
         const queue = [{ x: entry.x, y: entry.y, dist: 0 }];
         const insideTiles = [];
 
-        // Step 1: Simple flood fill inward (up to 5 tiles deep)
+        // Flood-fill inward (up to 5 tiles deep)
         while (queue.length > 0) {
             const { x, y, dist } = queue.shift();
             const key = `${x},${y}`;
             if (visited.has(key)) continue;
             visited.add(key);
 
-            if (x <= 0 || x >= 49 || y <= 0 || y >= 49) continue; // avoid edges
+            // Avoid edges or out-of-bounds
+            if (x <= 0 || x >= 49 || y <= 0 || y >= 49) continue;
 
-            if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+            // Skip walls
+            const terrainType = terrain.get(x, y);
+            if (terrainType === TERRAIN_MASK_WALL) continue;
+
             insideTiles.push({ x, y, dist });
 
+            // Expand flood fill
             if (dist < 5) {
-                for (const dx of [-1, 0, 1]) {
-                    for (const dy of [-1, 0, 1]) {
-                        if (Math.abs(dx) + Math.abs(dy) === 1) {
-                            queue.push({ x: x + dx, y: y + dy, dist: dist + 1 });
-                        }
-                    }
-                }
+                // Only expand in cardinal directions (no diagonals)
+                if (x > 0) queue.push({ x: x - 1, y, dist: dist + 1 });
+                if (x < 49) queue.push({ x: x + 1, y, dist: dist + 1 });
+                if (y > 0) queue.push({ x, y: y - 1, dist: dist + 1 });
+                if (y < 49) queue.push({ x, y: y + 1, dist: dist + 1 });
             }
         }
 
-        if (insideTiles.length === 0) return null;
+        if (insideTiles.length === 0) {
+            console.log(`[${room.name}] ❌ No walkable tiles found near entry ${entry.x},${entry.y}`);
+            return null;
+        }
 
-        // Step 2: Group by distance and find narrowest ring (fewest walkable tiles)
+        // Group by distance
         const byDist = {};
         for (const t of insideTiles) {
             if (!byDist[t.dist]) byDist[t.dist] = [];
             byDist[t.dist].push(t);
         }
 
+        // Find the smallest cross-section of walkable tiles (the choke)
         const narrowDist = Object.keys(byDist)
             .map(Number)
             .sort((a, b) => a - b)
-            .find(d => byDist[d].length <= 3); // <=3 tiles wide is a choke
+            .find(d => byDist[d].length > 0 && byDist[d].length <= 3);
 
-        if (!narrowDist) return null;
+        if (!narrowDist) {
+            console.log(`[${room.name}] ⚠️ No narrow chokepoint found for entry ${entry.x},${entry.y}`);
+            return null;
+        }
 
-        // Step 3: Return the tiles at the chokepoint
-        return byDist[narrowDist];
+        const chokeTiles = byDist[narrowDist];
+        if (!chokeTiles || chokeTiles.length === 0) return null;
+
+        // Return tiles as RoomPositions
+        return chokeTiles.map(t => new RoomPosition(t.x, t.y, room.name));
     },
 };
