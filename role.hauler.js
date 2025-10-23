@@ -1,15 +1,20 @@
 const roomCache = require('roomCache');
+const pathCache = require('pathCache');
 
 module.exports = {
     run(creep) {
-        // Toggle hauling state
+        // -------------------------
+        // 1️⃣ Toggle hauling state
+        // -------------------------
         if (creep.memory.hauling && creep.store[RESOURCE_ENERGY] === 0) creep.memory.hauling = false;
         if (!creep.memory.hauling && creep.store.getFreeCapacity() === 0) creep.memory.hauling = true;
 
         const room = creep.room;
 
+        // -------------------------
+        // 2️⃣ Collect energy if not hauling
+        // -------------------------
         if (!creep.memory.hauling) {
-            // Pick up nearest dropped energy, tombstone, or container
             const targets = roomCache.getDropped(room)
                 .concat(roomCache.getTombstones(room))
                 .concat(roomCache.getContainers(room));
@@ -17,28 +22,35 @@ module.exports = {
             const target = creep.pos.findClosestByPath(targets);
             if (!target) return;
 
+            // Move using path cache
+            pathCache.moveTo(creep, target, { visualizePathStyle: { stroke: '#ffaa00' } });
+
+            // Pickup or withdraw energy
             if (target.resourceType) {
-                if (creep.pickup(target) === ERR_NOT_IN_RANGE) creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' }, reusePath: 5 });
+                creep.pickup(target);
             } else {
-                if (creep.withdraw(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) creep.moveTo(target, { visualizePathStyle: { stroke: '#ffaa00' }, reusePath: 5 });
+                creep.withdraw(target, RESOURCE_ENERGY);
             }
             return;
         }
 
-        // Deliver to priority targets: spawn, tower, extension
+        // -------------------------
+        // 3️⃣ Deliver energy to priority targets
+        // -------------------------
         const deliverPriority = [STRUCTURE_SPAWN, STRUCTURE_TOWER, STRUCTURE_EXTENSION];
         for (const type of deliverPriority) {
             const targets = roomCache.getStructures(room, [type])[type];
             const target = creep.pos.findClosestByPath(targets);
             if (target) {
-                if (creep.transfer(target, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
-                    creep.moveTo(target, { visualizePathStyle: { stroke: '#ffffff' }, reusePath: 5 });
-                }
+                pathCache.moveTo(creep, target, { visualizePathStyle: { stroke: '#ffffff' } });
+                creep.transfer(target, RESOURCE_ENERGY);
                 return;
             }
         }
 
-        // Fallback: drop on ground
+        // -------------------------
+        // 4️⃣ Fallback: drop energy
+        // -------------------------
         creep.drop(RESOURCE_ENERGY);
     }
 };
