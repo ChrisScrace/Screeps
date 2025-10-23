@@ -17,8 +17,8 @@ module.exports = {
         if (!creep.memory.hauling) {
             // Get or pick target
             let target = Game.getObjectById(creep.memory.targetId);
-            if (!target || 
-                (target.energy !== undefined && target.energy === 0) || 
+            if (!target ||
+                (target.energy !== undefined && target.energy === 0) ||
                 (target.store && target.store[RESOURCE_ENERGY] === 0)) {
 
                 const targets = roomCache.getDropped(room)
@@ -49,35 +49,46 @@ module.exports = {
         // -------------------------
         // 3. Deliver energy if hauling
         // -------------------------
-        let deliverTarget = Game.getObjectById(creep.memory.deliverId);
-
-        // Pick new delivery target if needed
-        if (!deliverTarget || deliverTarget.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
+        // Deliver energy if hauling
+        if (creep.memory.hauling) {
             const deliverPriority = [STRUCTURE_SPAWN, STRUCTURE_TOWER, STRUCTURE_EXTENSION];
-            deliverTarget = null;
+            let deliverTarget = null;
 
-            for (const type of deliverPriority) {
-                const structures = roomCache.getStructures(room, [type])[type];
-                if (!structures || !structures.length) continue;
-
-                deliverTarget = creep.pos.findClosestByRange(structures);
-                if (deliverTarget) break;
+            // Always check memory first
+            if (creep.memory.deliverId) {
+                const t = Game.getObjectById(creep.memory.deliverId);
+                if (t && t.store.getFreeCapacity(RESOURCE_ENERGY) > 0) deliverTarget = t;
+                else delete creep.memory.deliverId; // clear invalid target
             }
 
-            if (deliverTarget) creep.memory.deliverId = deliverTarget.id;
-        }
+            // Find new target if none or memory target invalid
+            if (!deliverTarget) {
+                for (const type of deliverPriority) {
+                    const structures = roomCache.getStructures(room, [type])[type];
+                    if (!structures || !structures.length) continue;
 
-        // Move to delivery target
-        if (deliverTarget) {
-            pathCache.moveTo(creep, deliverTarget, { visualizePathStyle: { stroke: '#ffffff' } });
-            creep.transfer(deliverTarget, RESOURCE_ENERGY);
+                    const closest = creep.pos.findClosestByPath(structures, {
+                        filter: s => s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+                    });
 
-            // Clear memory if full
-            if (deliverTarget.store.getFreeCapacity(RESOURCE_ENERGY) === 0) {
-                delete creep.memory.deliverId;
+                    if (closest) {
+                        deliverTarget = closest;
+                        creep.memory.deliverId = closest.id;
+                        break;
+                    }
+                }
             }
-            return;
+
+            if (deliverTarget) {
+                pathCache.moveTo(creep, deliverTarget, { visualizePathStyle: { stroke: '#ffffff' } });
+                creep.transfer(deliverTarget, RESOURCE_ENERGY);
+                return;
+            }
+
+            // Fallback: drop on ground if nowhere to deliver
+            creep.drop(RESOURCE_ENERGY);
         }
+
 
         // -------------------------
         // 4. Fallback: drop energy on ground
