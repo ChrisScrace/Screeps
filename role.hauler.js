@@ -40,13 +40,12 @@ module.exports = {
             return;
         }
 
-
         // -------------------------
-        // 3. Deliver energy to spawn/extensions
+        // 3. Deliver energy to spawns
         // -------------------------
         let deliverTarget = creep.pos.findClosestByPath(FIND_STRUCTURES, {
             filter: s =>
-                (s.structureType === STRUCTURE_SPAWN || s.structureType === STRUCTURE_EXTENSION) &&
+                s.structureType === STRUCTURE_SPAWN &&
                 s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
         });
 
@@ -58,7 +57,39 @@ module.exports = {
         }
 
         // -------------------------
-        // 4. Deliver energy to builders
+        // 4. Deliver energy to towers
+        // -------------------------
+        deliverTarget = creep.pos.findClosestByPath(FIND_STRUCTURES, {
+            filter: s =>
+                s.structureType === STRUCTURE_TOWER &&
+                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+
+        if (deliverTarget) {
+            if (creep.transfer(deliverTarget, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                creep.moveTo(deliverTarget, { visualizePathStyle: { stroke: '#ff0000' } });
+            }
+            return;
+        }
+
+        // -------------------------
+        // 5. Deliver energy to extensions
+        // -------------------------
+        deliverTarget = creep.pos.findClosestByPath(FIND_STRUCTURES, {
+            filter: s =>
+                s.structureType === STRUCTURE_EXTENSION &&
+                s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
+        });
+
+        if (deliverTarget) {
+            if (creep.transfer(deliverTarget, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
+                creep.moveTo(deliverTarget, { visualizePathStyle: { stroke: '#00ffff' } });
+            }
+            return;
+        }
+
+        // -------------------------
+        // 6. Deliver energy to builders
         // -------------------------
         const builder = creep.pos.findClosestByPath(FIND_MY_CREEPS, {
             filter: c => c.memory.role === 'builder' && c.store.getFreeCapacity(RESOURCE_ENERGY) > 0
@@ -72,7 +103,7 @@ module.exports = {
         }
 
         // -------------------------
-        // 5. Drop on ground if nowhere else
+        // 7. Drop on ground if nowhere else
         // -------------------------
         creep.drop(RESOURCE_ENERGY);
     }

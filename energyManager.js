@@ -34,12 +34,15 @@ module.exports = {
         // -----------------------
         // 3. Spawn (fallback)
         // -----------------------
-        const spawn = creep.pos.findClosestByPath(FIND_MY_SPAWNS)[0];
-        if (spawn && spawn.energy > 0) { // ✅ use spawn.energy instead of spawn.store
-            if (spawn.transferEnergy(creep) === ERR_NOT_IN_RANGE) {
-                creep.moveTo(spawn, { visualizePathStyle: { stroke: '#ffaa00' } });
+        const spawns = creep.room.find(FIND_MY_SPAWNS);
+        if (spawns.length) {
+            const spawn = spawns[0];
+            if (spawn.energy > 0) {
+                if (creep.transferEnergy(spawn) === ERR_NOT_IN_RANGE) {
+                    creep.moveTo(spawn, { visualizePathStyle: { stroke: '#ffaa00' } });
+                }
+                return true;
             }
-            return true;
         }
 
         return false; // nothing to do
