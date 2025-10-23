@@ -2,7 +2,7 @@ const roomCache = require('roomCache');
 
 module.exports = {
     run(room) {
-        const towers = roomCache.getStructures(room, [STRUCTURE_TOWER])[STRUCTURE_TOWER];
+        const towers = roomCache.getStructures(room).filter(s => s.structureType === STRUCTURE_TOWER);
 
         for (const tower of towers) {
             const hostile = tower.pos.findClosestByRange(roomCache.getHostiles(room));
