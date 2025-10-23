@@ -5,16 +5,18 @@ const PRIORITY = {
     CONTAINER: 1,
     EXTENSION: 2,
     TOWER: 3,
-    ROAD: 4
+    DEFENSE: 4,
+    ROAD: 5
 };
 
 const STRUCTURE_PRIORITY = {
     [STRUCTURE_CONTAINER]: PRIORITY.CONTAINER,
     [STRUCTURE_EXTENSION]: PRIORITY.EXTENSION,
     [STRUCTURE_TOWER]: PRIORITY.TOWER,
+    [STRUCTURE_WALL]: PRIORITY.DEFENSE,
+    [STRUCTURE_RAMPART]: PRIORITY.DEFENSE,
     [STRUCTURE_ROAD]: PRIORITY.ROAD
 };
-
 module.exports = {
     run(room) {
         if (!room.controller || !room.controller.my) return;
@@ -33,7 +35,14 @@ module.exports = {
         // === PRIORITY 3: Towers ===
         if (this.buildTowers(room)) return;
 
-        // === PRIORITY 4: Roads (only if no other sites exist) ===
+        // === NEW: PRIORITY 4: Entrance walls/ramparts ===
+        if (this.buildEntranceDefenses(room)) return;
+
+        if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
+            this.buildRoads(room);
+        }
+
+        // === PRIORITY 5: Roads (only if no other sites exist) ===
         if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
             this.buildRoads(room);
         }
@@ -43,46 +52,46 @@ module.exports = {
     // PRIORITY 1: SOURCE CONTAINERS
     // -----------------------------
     buildSourceContainers(room) {
-    let built = false;
-    const sources = room.find(FIND_SOURCES);
+        let built = false;
+        const sources = room.find(FIND_SOURCES);
 
-    for (const source of sources) {
-        const tiles = sourceManager.getTilesForSource(source.id, room.name);
-        if (!tiles || tiles.length === 0) continue;
+        for (const source of sources) {
+            const tiles = sourceManager.getTilesForSource(source.id, room.name);
+            if (!tiles || tiles.length === 0) continue;
 
-        for (const tile of tiles) {
-            const { x, y } = tile;
+            for (const tile of tiles) {
+                const { x, y } = tile;
 
-            const terrain = room.getTerrain().get(x, y);
-            if (terrain === TERRAIN_MASK_WALL) continue;
+                const terrain = room.getTerrain().get(x, y);
+                if (terrain === TERRAIN_MASK_WALL) continue;
 
-            // Remove only blocking sites that are not containers or roads
-            const blockingSites = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y);
-            for (const site of blockingSites) {
-                const priority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
-                if (site.structureType !== STRUCTURE_CONTAINER && site.progress === 0 && priority !== PRIORITY.ROAD) {
-                    site.remove();
+                // Remove only blocking sites that are not containers or roads
+                const blockingSites = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y);
+                for (const site of blockingSites) {
+                    const priority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
+                    if (site.structureType !== STRUCTURE_CONTAINER && site.progress === 0 && priority !== PRIORITY.ROAD) {
+                        site.remove();
+                    }
+                }
+
+                // Skip if container already exists or planned
+                const hasContainer = room.lookForAt(LOOK_STRUCTURES, x, y)
+                    .some(s => s.structureType === STRUCTURE_CONTAINER);
+                const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y)
+                    .some(s => s.structureType === STRUCTURE_CONTAINER);
+                if (hasContainer || hasSite) continue;
+
+                if (room.createConstructionSite(x, y, STRUCTURE_CONTAINER) === OK) {
+                    this.cancelLowerPrioritySites(room, PRIORITY.CONTAINER);
+                    built = true;
+                    break;
                 }
             }
-
-            // Skip if container already exists or planned
-            const hasContainer = room.lookForAt(LOOK_STRUCTURES, x, y)
-                .some(s => s.structureType === STRUCTURE_CONTAINER);
-            const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y)
-                .some(s => s.structureType === STRUCTURE_CONTAINER);
-            if (hasContainer || hasSite) continue;
-
-            if (room.createConstructionSite(x, y, STRUCTURE_CONTAINER) === OK) {
-                this.cancelLowerPrioritySites(room, PRIORITY.CONTAINER);
-                built = true;
-                break;
-            }
+            if (built) break; // Only build one container per tick
         }
-        if (built) break; // Only build one container per tick
-    }
 
-    return built;
-},
+        return built;
+    },
 
     // -----------------------------
     // PRIORITY 2: EXTENSIONS
@@ -151,7 +160,53 @@ module.exports = {
     },
 
     // -----------------------------
-    // PRIORITY 4: ROADS
+    // PRIORITY 4: ENTRANCE DEFENSES
+    // -----------------------------
+    buildEntranceDefenses(room) {
+        const terrain = room.getTerrain();
+        const entrances = [];
+
+        // Step 1: Detect walkable tiles at room edges
+        for (let x = 0; x < 50; x++) {
+            if (terrain.get(x, 0) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 0 });
+            if (terrain.get(x, 49) !== TERRAIN_MASK_WALL) entrances.push({ x, y: 49 });
+        }
+        for (let y = 1; y < 49; y++) {
+            if (terrain.get(0, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 0, y });
+            if (terrain.get(49, y) !== TERRAIN_MASK_WALL) entrances.push({ x: 49, y });
+        }
+
+        // No entrances? Fully sealed room
+        if (entrances.length === 0) return false;
+
+        // Step 2: For each entrance, trace a short inward corridor and pick the narrowest part
+        for (const entry of entrances) {
+            const choke = this.findChokepoint(room, entry, terrain);
+            if (!choke) continue;
+
+            // Step 3: Build a wall line at the chokepoint, with one rampart as gate
+            const rampartIndex = Math.floor(Math.random() * choke.length);
+            for (let i = 0; i < choke.length; i++) {
+                const { x, y } = choke[i];
+                const type = i === rampartIndex ? STRUCTURE_RAMPART : STRUCTURE_WALL;
+
+                // Skip if already built or planned
+                const hasStructure = room.lookForAt(LOOK_STRUCTURES, x, y).length > 0;
+                const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y).length > 0;
+                if (hasStructure || hasSite) continue;
+
+                if (room.createConstructionSite(x, y, type) === OK) {
+                    this.cancelLowerPrioritySites(room, 3.5);
+                    return true; // build one per tick
+                }
+            }
+        }
+
+        return false;
+    },
+
+    // -----------------------------
+    // PRIORITY 5: ROADS
     // -----------------------------
     buildRoads(room) {
         if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
@@ -199,5 +254,57 @@ module.exports = {
             const sitePriority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
             return sitePriority < priorityLevel;
         });
-    }
+    },
+
+    /**
+ * Finds a chokepoint (narrowest pass) a few tiles inward from the given entrance.
+ * Returns an array of positions for the wall line.
+ */
+    findChokepoint(room, entry, terrain) {
+        const visited = new Set();
+        const queue = [{ x: entry.x, y: entry.y, dist: 0 }];
+        const insideTiles = [];
+
+        // Step 1: Simple flood fill inward (up to 5 tiles deep)
+        while (queue.length > 0) {
+            const { x, y, dist } = queue.shift();
+            const key = `${x},${y}`;
+            if (visited.has(key)) continue;
+            visited.add(key);
+
+            if (x <= 0 || x >= 49 || y <= 0 || y >= 49) continue; // avoid edges
+
+            if (terrain.get(x, y) === TERRAIN_MASK_WALL) continue;
+            insideTiles.push({ x, y, dist });
+
+            if (dist < 5) {
+                for (const dx of [-1, 0, 1]) {
+                    for (const dy of [-1, 0, 1]) {
+                        if (Math.abs(dx) + Math.abs(dy) === 1) {
+                            queue.push({ x: x + dx, y: y + dy, dist: dist + 1 });
+                        }
+                    }
+                }
+            }
+        }
+
+        if (insideTiles.length === 0) return null;
+
+        // Step 2: Group by distance and find narrowest ring (fewest walkable tiles)
+        const byDist = {};
+        for (const t of insideTiles) {
+            if (!byDist[t.dist]) byDist[t.dist] = [];
+            byDist[t.dist].push(t);
+        }
+
+        const narrowDist = Object.keys(byDist)
+            .map(Number)
+            .sort((a, b) => a - b)
+            .find(d => byDist[d].length <= 3); // <=3 tiles wide is a choke
+
+        if (!narrowDist) return null;
+
+        // Step 3: Return the tiles at the chokepoint
+        return byDist[narrowDist];
+    },
 };
