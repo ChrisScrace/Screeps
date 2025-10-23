@@ -50,5 +50,32 @@ module.exports = {
         this.init(room);
         if (!room._cache.sources) room._cache.sources = room.find(FIND_SOURCES);
         return room._cache.sources;
+    },
+
+    getBuildTargets(room) {
+        this.init(room);
+        if (!room._cache.buildTargets) {
+            room._cache.buildTargets = room.find(FIND_CONSTRUCTION_SITES);
+        }
+        return room._cache.buildTargets;
+    },
+
+    getUpgradeTargets(room) {
+        this.init(room);
+        if (!room._cache.upgradeTargets) {
+            room._cache.upgradeTargets = room.controller && room.controller.my ? [room.controller] : [];
+        }
+        return room._cache.upgradeTargets;
+    },
+
+    getRepairTargets(room, minHits = 2000) {
+        this.init(room);
+        if (!room._cache.repairTargets) {
+            room._cache.repairTargets = room.find(FIND_STRUCTURES, {
+                filter: s => (s.hits < s.hitsMax && s.hits < 50000) || s.hits < minHits
+            });
+        }
+        return room._cache.repairTargets;
     }
+
 };

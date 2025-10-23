@@ -2,12 +2,12 @@ const roomCache = require('roomCache');
 
 module.exports = {
     run(creep) {
-        if (creep.memory.upgrading && creep.store[RESOURCE_ENERGY] === 0) creep.memory.upgrading = false;
-        if (!creep.memory.upgrading && creep.store.getFreeCapacity() === 0) creep.memory.upgrading = true;
+        if (creep.memory.repairing && creep.store[RESOURCE_ENERGY] === 0) creep.memory.repairing = false;
+        if (!creep.memory.repairing && creep.store.getFreeCapacity() === 0) creep.memory.repairing = true;
 
         const room = creep.room;
 
-        if (!creep.memory.upgrading) {
+        if (!creep.memory.repairing) {
             // Collect energy
             const sources = roomCache.getDropped(room)
                 .concat(roomCache.getTombstones(room))
@@ -24,12 +24,13 @@ module.exports = {
             return;
         }
 
-        // Upgrade controller
-        const controller = roomCache.getUpgradeTargets(room)[0];
-        if (!controller) return;
+        // Repair structures
+        const repairTargets = roomCache.getRepairTargets(room);
+        const target = creep.pos.findClosestByPath(repairTargets);
+        if (!target) return;
 
-        if (creep.upgradeController(controller) === ERR_NOT_IN_RANGE) {
-            creep.moveTo(controller, { visualizePathStyle: { stroke: '#00ffff' }, reusePath: 5 });
+        if (creep.repair(target) === ERR_NOT_IN_RANGE) {
+            creep.moveTo(target, { visualizePathStyle: { stroke: '#ff9900' }, reusePath: 5 });
         }
     }
 };
