@@ -4,11 +4,17 @@ const roleBodies = {
     harvester: (energy) => {
         const body = [];
         let cost = 0;
-        while (cost + 200 <= energy && body.length < 9) {
-            body.push(WORK, CARRY, MOVE);
-            cost += 200;
+
+        body.push(CARRY);
+        body.push(MOVE);
+        cost += 100;
+
+        while (cost + 100 <= energy && body.length < 15) {
+            body.push(WORK);
+            cost += 100;
         }
-        return body.length ? body : [WORK, CARRY, MOVE];
+
+        return body;
     },
     hauler: (energy) => {
         const body = [];
@@ -82,6 +88,7 @@ module.exports = {
         });
 
         const energySources = freeEnergy.length + energyContainers.length;
+        const targetHaulers = Math.min(3, Math.max(1, Math.ceil(energySources / 2)));
         if (energySources > haulers.length) {
             return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
         }
