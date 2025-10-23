@@ -38,7 +38,7 @@ module.exports = {
         if (spawns.length) {
             const spawn = spawns[0];
             if (spawn.energy > 0) {
-                if (creep.transferEnergy(spawn) === ERR_NOT_IN_RANGE) {
+                if (spawn.transfer(creep, RESOURCE_ENERGY) === ERR_NOT_IN_RANGE) {
                     creep.moveTo(spawn, { visualizePathStyle: { stroke: '#ffaa00' } });
                 }
                 return true;
