@@ -14,25 +14,48 @@ const STRUCTURE_PRIORITY = {
     [STRUCTURE_TOWER]: PRIORITY.TOWER,
     [STRUCTURE_ROAD]: PRIORITY.ROAD
 };
+
 module.exports = {
     run(room) {
         if (!room.controller || !room.controller.my) return;
 
-        // Limit total sites to avoid spam
+        // Limit total sites per tick to avoid spam
         const maxSites = 20;
         const currentSites = room.find(FIND_CONSTRUCTION_SITES);
         if (currentSites.length >= maxSites) return;
 
-        // === PRIORITY 1: Containers on all source tiles ===
-        if (this.buildSourceContainers(room)) return;
+        // -------------------
+        // Cache structures and sites
+        // -------------------
+        const structuresMap = {};
+        const sitesMap = {};
+        room.find(FIND_STRUCTURES).forEach(s => structuresMap[`${s.pos.x},${s.pos.y}`] = s);
+        room.find(FIND_CONSTRUCTION_SITES).forEach(s => sitesMap[`${s.pos.x},${s.pos.y}`] = s);
 
-        // === PRIORITY 2: Extensions in grid pattern ===
-        if (this.buildExtensions(room)) return;
+        // -------------------
+        // Precompute buildable tiles
+        // -------------------
+        const buildableTiles = new Set();
+        const terrain = room.getTerrain();
+        for (let x = 1; x < 49; x++) {
+            for (let y = 1; y < 49; y++) {
+                const key = `${x},${y}`;
+                if (
+                    terrain.get(x, y) !== TERRAIN_MASK_WALL &&
+                    !structuresMap[key] &&
+                    !sitesMap[key]
+                ) {
+                    buildableTiles.add(key);
+                }
+            }
+        }
 
-        // === PRIORITY 3: Towers ===
-        if (this.buildTowers(room)) return;
-
-        // === PRIORITY 4: Roads (only if no other sites exist) ===
+        // -------------------
+        // Build priorities
+        // -------------------
+        if (this.buildSourceContainers(room, buildableTiles, sitesMap)) return;
+        if (this.buildExtensions(room, buildableTiles, sitesMap)) return;
+        if (this.buildTowers(room, buildableTiles, sitesMap)) return;
         if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
             this.buildRoads(room);
         }
@@ -41,52 +64,29 @@ module.exports = {
     // -----------------------------
     // PRIORITY 1: SOURCE CONTAINERS
     // -----------------------------
-    buildSourceContainers(room) {
-        let built = false;
+    buildSourceContainers(room, buildableTiles, sitesMap) {
         const sources = room.find(FIND_SOURCES);
-
         for (const source of sources) {
             const tiles = sourceManager.getTilesForSource(source.id, room.name);
             if (!tiles || tiles.length === 0) continue;
 
             for (const tile of tiles) {
-                const { x, y } = tile;
+                const key = `${tile.x},${tile.y}`;
+                if (!buildableTiles.has(key)) continue;
 
-                const terrain = room.getTerrain().get(x, y);
-                if (terrain === TERRAIN_MASK_WALL) continue;
-
-                // Remove only blocking sites that are not containers or roads
-                const blockingSites = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y);
-                for (const site of blockingSites) {
-                    const priority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
-                    if (site.structureType !== STRUCTURE_CONTAINER && site.progress === 0 && priority !== PRIORITY.ROAD) {
-                        site.remove();
-                    }
-                }
-
-                // Skip if container already exists or planned
-                const hasContainer = room.lookForAt(LOOK_STRUCTURES, x, y)
-                    .some(s => s.structureType === STRUCTURE_CONTAINER);
-                const hasSite = room.lookForAt(LOOK_CONSTRUCTION_SITES, x, y)
-                    .some(s => s.structureType === STRUCTURE_CONTAINER);
-                if (hasContainer || hasSite) continue;
-
-                if (room.createConstructionSite(x, y, STRUCTURE_CONTAINER) === OK) {
+                if (room.createConstructionSite(tile.x, tile.y, STRUCTURE_CONTAINER) === OK) {
                     this.cancelLowerPrioritySites(room, PRIORITY.CONTAINER);
-                    built = true;
-                    break;
+                    return true;
                 }
             }
-            if (built) break; // Only build one container per tick
         }
-
-        return built;
+        return false;
     },
 
     // -----------------------------
     // PRIORITY 2: EXTENSIONS
     // -----------------------------
-    buildExtensions(room) {
+    buildExtensions(room, buildableTiles, sitesMap) {
         const spawns = room.find(FIND_MY_SPAWNS);
         if (!spawns.length) return false;
 
@@ -98,19 +98,22 @@ module.exports = {
         const maxExtensions = limits[room.controller.level] || 0;
         if (extensions.length + sites.length >= maxExtensions) return false;
 
+        // Precompute candidate positions around spawn
         const spacing = 2;
-        for (let dx = -6; dx <= 6; dx++) {
-            for (let dy = -6; dy <= 6; dy++) {
-                if ((Math.abs(dx) % spacing !== 0) || (Math.abs(dy) % spacing !== 0)) continue;
+        const positions = [];
+        for (let dx = -6; dx <= 6; dx += spacing) {
+            for (let dy = -6; dy <= 6; dy += spacing) {
                 const x = spawn.pos.x + dx;
                 const y = spawn.pos.y + dy;
+                const key = `${x},${y}`;
+                if (buildableTiles.has(key)) positions.push({ x, y });
+            }
+        }
 
-                if (!this.isBuildableTile(room, x, y)) continue;
-
-                if (room.createConstructionSite(x, y, STRUCTURE_EXTENSION) === OK) {
-                    this.cancelLowerPrioritySites(room, PRIORITY.EXTENSION);
-                    return true;
-                }
+        for (const pos of positions) {
+            if (room.createConstructionSite(pos.x, pos.y, STRUCTURE_EXTENSION) === OK) {
+                this.cancelLowerPrioritySites(room, PRIORITY.EXTENSION);
+                return true;
             }
         }
 
@@ -120,12 +123,11 @@ module.exports = {
     // -----------------------------
     // PRIORITY 3: TOWERS
     // -----------------------------
-    buildTowers(room) {
+    buildTowers(room, buildableTiles, sitesMap) {
         if (room.controller.level < 3) return false;
 
         const towers = room.find(FIND_STRUCTURES, { filter: s => s.structureType === STRUCTURE_TOWER });
         const sites = room.find(FIND_CONSTRUCTION_SITES, { filter: s => s.structureType === STRUCTURE_TOWER });
-
         const maxTowers = Math.min(1 + Math.floor(room.controller.level / 2), 6);
         if (towers.length + sites.length >= maxTowers) return false;
 
@@ -138,7 +140,7 @@ module.exports = {
         for (const o of offsets) {
             const x = center.x + o.x;
             const y = center.y + o.y;
-            if (!this.isBuildableTile(room, x, y)) continue;
+            if (!buildableTiles.has(`${x},${y}`)) continue;
 
             if (room.createConstructionSite(x, y, STRUCTURE_TOWER) === OK) {
                 this.cancelLowerPrioritySites(room, PRIORITY.TOWER);
@@ -153,9 +155,7 @@ module.exports = {
     // PRIORITY 4: ROADS
     // -----------------------------
     buildRoads(room) {
-        if (!this.hasPendingHigherPrioritySites(room, PRIORITY.ROAD)) {
-            roadPlanner.planRoads(room, { double: true });
-        }
+        roadPlanner.planRoads(room, { double: true });
     },
 
     // -----------------------------
@@ -171,32 +171,18 @@ module.exports = {
         return !hasStructure && !hasSite;
     },
 
-    // Cancel empty construction sites with lower priority than `priorityLevel`
     cancelLowerPrioritySites(room, priorityLevel) {
         const sites = room.find(FIND_CONSTRUCTION_SITES);
         for (const site of sites) {
             const sitePriority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
-
             if (sitePriority > priorityLevel && site.progress === 0) {
-                // Skip removing if a higher-priority structure or site is at this position
-                const hasHighPriority = room.lookForAt(LOOK_STRUCTURES, site.pos.x, site.pos.y)
-                    .some(s => (STRUCTURE_PRIORITY[s.structureType] || PRIORITY.ROAD) <= priorityLevel);
-                const hasHighPrioritySite = room.lookForAt(LOOK_CONSTRUCTION_SITES, site.pos.x, site.pos.y)
-                    .some(s => (STRUCTURE_PRIORITY[s.structureType] || PRIORITY.ROAD) <= priorityLevel);
-
-                if (!hasHighPriority && !hasHighPrioritySite) {
-                    site.remove();
-                }
+                site.remove();
             }
         }
     },
 
-    // Check if there are any higher-priority pending sites than given level
     hasPendingHigherPrioritySites(room, priorityLevel) {
         const sites = room.find(FIND_CONSTRUCTION_SITES);
-        return sites.some(site => {
-            const sitePriority = STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD;
-            return sitePriority < priorityLevel;
-        });
+        return sites.some(site => (STRUCTURE_PRIORITY[site.structureType] || PRIORITY.ROAD) < priorityLevel);
     }
 };
