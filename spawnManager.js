@@ -85,7 +85,7 @@ module.exports = {
                 s.store[RESOURCE_ENERGY] > 50
         });
 
-        const targetHaulers = Math.min(3, Math.max(1, Math.ceil(energyContainers / 2)));
+        const targetHaulers = Math.min(4, Math.max(1, energyContainers.length));
         if (targetHaulers > haulers.length) {
             return this.spawnCreep(spawn, 'hauler', null, energyAvailable);
         }
@@ -98,7 +98,7 @@ module.exports = {
 
         // Calculate total remaining energy/work
         const totalEnergyRequired = constructionSites.reduce((sum, site) => sum + (site.progressTotal - site.progress), 0);
-        const targetBuilders = Math.min(4, Math.max(1, Math.ceil(totalEnergyRequired / 500)));
+        const targetBuilders = Math.min(4, Math.max(1, Math.ceil(totalEnergyRequired / 5000)));
 
         if (numBuilders < targetBuilders) {
             return this.spawnCreep(spawn, 'builder', null, energyAvailable);
