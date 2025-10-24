@@ -1,86 +1,134 @@
 module.exports = {
     planChokepoints: function(room) {
         if (!room) return;
+        const visual = new RoomVisual(room.name);
+        const terrain = room.getTerrain();
 
-        var visual = new RoomVisual(room.name);
-
-        // -----------------------
-        // 1. Detect walkable edges
-        // -----------------------
         function isWalkable(x, y) {
-            var terrain = room.getTerrain().get(x, y);
-            return terrain !== TERRAIN_MASK_WALL;
+            return terrain.get(x, y) !== TERRAIN_MASK_WALL;
         }
 
-        var edgeTiles = [];
-        for (var i = 0; i < 50; i++) {
+        // --- Step 1: find edge entrances ---
+        const edgeTiles = [];
+        for (let i = 0; i < 50; i++) {
             if (isWalkable(i, 0)) edgeTiles.push({x:i, y:0});
             if (isWalkable(i, 49)) edgeTiles.push({x:i, y:49});
             if (isWalkable(0, i)) edgeTiles.push({x:0, y:i});
             if (isWalkable(49, i)) edgeTiles.push({x:49, y:i});
         }
 
-        // -----------------------
-        // 2. Cluster adjacent tiles into entrances
-        // -----------------------
-        var entrances = [];
-        var visited = {};
+        const visited = {};
+        const entrances = [];
+        function key(t){return t.x+','+t.y;}
 
-        function getKey(tile) { return tile.x + ',' + tile.y; }
-
-        function bfs(start) {
-            var queue = [start];
-            var cluster = [];
-            while (queue.length) {
-                var t = queue.shift();
-                var k = getKey(t);
-                if (visited[k]) continue;
-                visited[k] = true;
+        function bfs(start){
+            const q=[start], cluster=[];
+            while(q.length){
+                const t=q.shift();
+                const k=key(t);
+                if(visited[k])continue;
+                visited[k]=true;
                 cluster.push(t);
-
-                // Check 4 neighbors
-                var neighbors = [
-                    {x:t.x+1, y:t.y}, {x:t.x-1, y:t.y},
-                    {x:t.x, y:t.y+1}, {x:t.x, y:t.y-1}
+                const dirs=[
+                    {x:t.x+1,y:t.y},{x:t.x-1,y:t.y},
+                    {x:t.x,y:t.y+1},{x:t.x,y:t.y-1}
                 ];
-                for (var n=0;n<neighbors.length;n++) {
-                    var nk = getKey(neighbors[n]);
-                    if (!visited[nk] && edgeTiles.some(function(et){ return et.x===neighbors[n].x && et.y===neighbors[n].y; })) {
-                        queue.push(neighbors[n]);
-                    }
+                for(const n of dirs){
+                    if(!visited[key(n)] && edgeTiles.some(e=>e.x===n.x&&e.y===n.y))
+                        q.push(n);
                 }
             }
             return cluster;
         }
 
-        for (var e=0;e<edgeTiles.length;e++) {
-            var tile = edgeTiles[e];
-            var k = getKey(tile);
-            if (!visited[k]) {
-                entrances.push(bfs(tile));
-            }
+        for(const e of edgeTiles){
+            if(!visited[key(e)]) entrances.push(bfs(e));
         }
 
-        // -----------------------
-        // 3. Visualize walls & single passable entrance
-        // -----------------------
-        entrances.forEach(function(cluster) {
-            if (cluster.length === 0) return;
+        // --- Step 2: plan horseshoe with full rampart border ---
+        for (const cluster of entrances) {
+            if (cluster.length === 0) continue;
 
-            // Find center of entrance (passable tile)
-            var sumX = 0, sumY = 0;
-            for (var i=0;i<cluster.length;i++) { sumX += cluster[i].x; sumY += cluster[i].y; }
-            var center = {x: Math.round(sumX / cluster.length), y: Math.round(sumY / cluster.length)};
+            const horizontal = cluster.every(t => t.y === cluster[0].y);
+            const sorted = cluster.slice().sort((a,b)=> horizontal ? a.x-b.x : a.y-b.y);
 
-            // Draw walls around (all tiles except center)
-            for (var i=0;i<cluster.length;i++) {
-                var t = cluster[i];
-                if (t.x === center.x && t.y === center.y) continue;
-                visual.text('W', t.x, t.y, {color:'#ff0000', font:0.6, align:'center'});
+            // move inwards two tiles
+            const shift = 2;
+            const shifted = sorted.map(t=>{
+                return horizontal
+                    ? {x:t.x, y:(t.y < 25 ? t.y+shift : t.y-shift)}
+                    : {x:(t.x < 25 ? t.x+shift : t.x-shift), y:t.y};
+            });
+
+            // extend one tile past edges
+            const extended = [];
+            if (horizontal) {
+                extended.push({x:shifted[0].x-1, y:shifted[0].y});
+                extended.push(...shifted);
+                extended.push({x:shifted[shifted.length-1].x+1, y:shifted[shifted.length-1].y});
+            } else {
+                extended.push({x:shifted[0].x, y:shifted[0].y-1});
+                extended.push(...shifted);
+                extended.push({x:shifted[shifted.length-1].x, y:shifted[shifted.length-1].y+1});
             }
 
-            // Draw passable tile
-            visual.text('E', center.x, center.y, {color:'#00ff00', font:0.6, align:'center'});
-        });
+            const rampartStart = Math.floor((extended.length - 3) / 2);
+            const rampartEnd = rampartStart + 2;
+
+            // build a set of all checkpoint tiles (walls + ramp gap + caps)
+            const checkpointTiles = [];
+
+            // draw walls and ramparts
+            extended.forEach((t,i)=>{
+                const isRampart = (i >= rampartStart && i <= rampartEnd);
+                visual.text(isRampart ? 'R' : 'W', t.x, t.y, {
+                    color: isRampart ? '#00ff00' : '#ff0000',
+                    font: 0.6, align:'center'
+                });
+                checkpointTiles.push({x:t.x, y:t.y});
+            });
+
+            // add the caps (horseshoe ends)
+            const first = extended[0];
+            const last = extended[extended.length - 1];
+            if (horizontal) {
+                const dy = (cluster[0].y < 25) ? -1 : 1;
+                checkpointTiles.push({x:first.x, y:first.y + dy});
+                checkpointTiles.push({x:last.x, y:last.y + dy});
+                visual.text('W', first.x, first.y + dy, {color:'#ff0000', font:0.6, align:'center'});
+                visual.text('W', last.x, last.y + dy, {color:'#ff0000', font:0.6, align:'center'});
+            } else {
+                const dx = (cluster[0].x < 25) ? -1 : 1;
+                checkpointTiles.push({x:first.x + dx, y:first.y});
+                checkpointTiles.push({x:last.x + dx, y:last.y});
+                visual.text('W', first.x + dx, first.y, {color:'#ff0000', font:0.6, align:'center'});
+                visual.text('W', last.x + dx, last.y, {color:'#ff0000', font:0.6, align:'center'});
+            }
+
+            // --- Step 3: draw a full border of ramparts around all checkpoint tiles ---
+            const dirs = [
+                {x:-1,y:-1},{x:0,y:-1},{x:1,y:-1},
+                {x:-1,y:0},             {x:1,y:0},
+                {x:-1,y:1}, {x:0,y:1}, {x:1,y:1}
+            ];
+
+            const rampartBorder = new Set();
+            const checkpointSet = new Set(checkpointTiles.map(t=>key(t)));
+
+            for (const t of checkpointTiles) {
+                for (const d of dirs) {
+                    const nx = t.x + d.x, ny = t.y + d.y;
+                    const k = nx + ',' + ny;
+                    if (!checkpointSet.has(k)) rampartBorder.add(k);
+                }
+            }
+
+            for (const k of rampartBorder) {
+                const [x,y] = k.split(',').map(Number);
+                if (x >= 0 && y >= 0 && x < 50 && y < 50) {
+                    visual.text('R', x, y, {color:'#00ff00', font:0.6, align:'center'});
+                }
+            }
+        }
     }
 };

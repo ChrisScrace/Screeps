@@ -30,7 +30,7 @@ module.exports.loop = function () {
         if (!room.controller || !room.controller.my) continue;
 
         //plan defensive structures
-        checkpointPlanner.planCheckpoints(room);
+        checkpointPlanner.planChokepoints(room);
 
         // Initialize source memory
         sourceManager.initRoom(room);
