@@ -2,6 +2,7 @@ const spawnManager = require('spawnManager');
 const constructionManager = require('constructionManager');
 const sourceManager = require('sourceManager');
 const towerManager = require('towerManager');
+const checkpointManager = require('checkpointManager');
 
 const roles = {
     harvester: require('role.harvester'),
@@ -10,7 +11,7 @@ const roles = {
     builder: require('role.builder')
 };
 
-module.exports.loop = function() {
+module.exports.loop = function () {
     // --- CLEANUP DEAD CREEPS ---
     for (const name in Memory.creeps) {
         if (!Game.creeps[name]) {
@@ -27,6 +28,9 @@ module.exports.loop = function() {
     for (const roomName in Game.rooms) {
         const room = Game.rooms[roomName];
         if (!room.controller || !room.controller.my) continue;
+
+        //plan defensive structures
+        checkpointManager.planCheckpoints(room);
 
         // Initialize source memory
         sourceManager.initRoom(room);
