@@ -41,7 +41,17 @@ const roleBodies = {
             cost += 200;
         }
         return body.length ? body : [WORK, CARRY, MOVE];
-    }
+    },
+    repairer: (energy) => {
+        const body = [];
+        let cost = 0;
+        while (cost + 200 <= energy && body.length < 15) {
+            body.push(WORK, CARRY, MOVE);
+            cost += 200;
+        }
+        return body.length ? body : [WORK, CARRY, MOVE];
+    },
+
 };
 
 module.exports = {
@@ -91,7 +101,28 @@ module.exports = {
         }
 
         // --------------------
-        // 3. BUILDERS
+        // 3. REPAIRERS
+        // --------------------
+        const repairers = creepsByRole['repairer'] || [];
+        const repairTargets = room.find(FIND_STRUCTURES, {
+            filter: s =>
+                s.hits < s.hitsMax * 0.75 && // below 75% HP
+                s.structureType !== STRUCTURE_WALL &&
+                s.structureType !== STRUCTURE_RAMPART
+        });
+
+        const totalDamage = repairTargets.reduce((sum, s) => sum + (s.hitsMax - s.hits), 0);
+
+        // 1 repairer if any damaged structures, up to 3 if major damage
+        const targetRepairers = Math.min(3, Math.max(1, Math.ceil(totalDamage / 100000)));
+
+        if (repairers.length < targetRepairers) {
+            return this.spawnCreep(spawn, 'repairer', null, energyAvailable);
+        }
+
+
+        // --------------------
+        // 4. BUILDERS
         // --------------------
         const numBuilders = (creepsByRole['builder'] || []).length;
         const constructionSites = room.find(FIND_CONSTRUCTION_SITES);
@@ -105,7 +136,7 @@ module.exports = {
         }
 
         // --------------------
-        // 4. UPGRADERS
+        // 5. UPGRADERS
         // --------------------
         const numUpgraders = (creepsByRole['upgrader'] || []).length;
         const targetUpgraders = Math.min(4, Math.max(1, Math.floor(room.energyCapacityAvailable / 400)));
