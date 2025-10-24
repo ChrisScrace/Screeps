@@ -40,13 +40,14 @@ module.exports = {
         for (let x = 1; x < 49; x++) {
             for (let y = 1; y < 49; y++) {
                 const key = `${x},${y}`;
-                if (
-                    terrain.get(x, y) !== TERRAIN_MASK_WALL &&
-                    !structuresMap[key] &&
-                    !sitesMap[key]
-                ) {
-                    buildableTiles.add(key);
+                if (terrain.get(x, y) !== TERRAIN_MASK_WALL && !sitesMap[key]) {
+                    const s = structuresMap[key];
+                    // Allow building over roads
+                    if (!s || s.structureType === STRUCTURE_ROAD) {
+                        buildableTiles.add(key);
+                    }
                 }
+
             }
         }
 
