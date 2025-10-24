@@ -152,5 +152,18 @@ module.exports = {
                 if (!Game.creeps[creepName]) delete src.assigned[key];
             }
         }
-    }
+    },
+
+    /**
+    * Get all verified tiles for a source
+    */
+    getTilesForSource: function (sourceId, roomName) {
+        if (!Memory.rooms) return [];
+        if (!Memory.rooms[roomName]) return [];
+        if (!Memory.rooms[roomName].sources) return [];
+        const src = Memory.rooms[roomName].sources[sourceId];
+        if (!src || !src.tiles || !src.tiles.length) return [];
+        return src.tiles;
+    },
+
 };
