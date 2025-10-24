@@ -24,7 +24,7 @@ module.exports = {
                     s.store.getFreeCapacity(RESOURCE_ENERGY) > 0
                 ),
                 repairTargets: allStructures.filter(s =>
-                    (s.hits < s.hitsMax && s.hits < 50000) || s.hits < 2000
+                    s.hits < s.hitsMax
                 ),
 
                 // Other
