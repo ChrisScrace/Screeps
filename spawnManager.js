@@ -5,9 +5,8 @@ const roleBodies = {
         const body = [];
         let cost = 0;
 
-        body.push(CARRY);
-        body.push(MOVE);
-        cost += 100;
+        body.push(WORK, CARRY, MOVE);
+        cost += 200;
 
         while (cost + 100 <= energy && body.length < 15) {
             body.push(WORK);
