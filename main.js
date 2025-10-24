@@ -2,7 +2,7 @@ const spawnManager = require('spawnManager');
 const constructionManager = require('constructionManager');
 const sourceManager = require('sourceManager');
 const towerManager = require('towerManager');
-const checkpointManager = require('checkpointManager');
+const checkpointPlanner = require('checkpointPlanner');
 
 const roles = {
     harvester: require('role.harvester'),
@@ -30,7 +30,7 @@ module.exports.loop = function () {
         if (!room.controller || !room.controller.my) continue;
 
         //plan defensive structures
-        checkpointManager.planCheckpoints(room);
+        checkpointPlanner.planCheckpoints(room);
 
         // Initialize source memory
         sourceManager.initRoom(room);
